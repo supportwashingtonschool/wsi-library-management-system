@@ -15,7 +15,6 @@ import {
   Layers,
   BookMarked,
   Printer,
-  Barcode as BarcodeIcon,
   Filter,
   Library,
   X,
