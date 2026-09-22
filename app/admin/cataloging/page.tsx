@@ -347,7 +347,7 @@ export default function CatalogingPage() {
                 >
                   <div className="flex items-center gap-1 text-[11px] font-bold text-slate-600 uppercase tracking-wider mb-1">
                     <Library className="h-3 w-3 text-blue-600" />
-                    <span>WSI School Library</span>
+                    <span>Washington School Philippines</span>
                   </div>
 
                   {savedBookInfo.callNumber && (

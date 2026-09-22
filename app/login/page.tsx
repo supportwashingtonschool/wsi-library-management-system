@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
-  Library,
   Mail,
   Lock,
   ArrowLeft,
@@ -35,15 +35,22 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col justify-center items-center bg-slate-100 p-4">
       <div className="w-full max-w-md">
         {/* Brand Header */}
-        <div className="text-center mb-8 space-y-2">
-          <div className="inline-flex p-3 bg-blue-600 text-white rounded-2xl shadow-lg shadow-blue-500/20 mb-2">
-            <Library className="h-8 w-8" />
+        <div className="text-center mb-8 space-y-3">
+          <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden bg-white p-1 shadow-xl ring-4 ring-blue-100 mb-2">
+            <Image
+              src="/logo.png"
+              alt="Washington School Philippines Official Seal"
+              width={96}
+              height={96}
+              className="w-full h-full object-contain"
+              priority
+            />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            WSI Librarian Portal
+            Washington School Philippines
           </h1>
-          <p className="text-xs text-slate-500 max-w-xs mx-auto">
-            Washington School International Library Management System
+          <p className="text-xs font-semibold text-blue-700 tracking-wider uppercase">
+            Librarian &amp; Staff Portal
           </p>
         </div>
 

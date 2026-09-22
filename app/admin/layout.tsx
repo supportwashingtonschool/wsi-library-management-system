@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { BookPlus, Repeat, LayoutDashboard, Library, ArrowLeft, Users, LogOut, Database } from "lucide-react";
+import Image from "next/image";
+import { BookPlus, Repeat, LayoutDashboard, ArrowLeft, Users, LogOut, Database } from "lucide-react";
 import { logout } from "@/app/actions/authActions";
 
 export default function AdminLayout({
@@ -11,9 +12,24 @@ export default function AdminLayout({
     <div className="min-h-screen flex bg-slate-100 text-slate-800">
       {/* Admin Sidebar */}
       <aside className="w-64 bg-slate-900 text-slate-100 flex flex-col shrink-0">
-        <div className="h-16 flex items-center gap-2 px-6 border-b border-slate-800 font-bold text-lg text-blue-400">
-          <Library className="h-6 w-6" />
-          <span>WSI Admin</span>
+        <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-800">
+          <div className="relative w-8 h-8 rounded-full overflow-hidden bg-white p-0.5 shrink-0 ring-1 ring-white/20">
+            <Image
+              src="/logo.png"
+              alt="Washington School Philippines"
+              width={32}
+              height={32}
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div className="min-w-0">
+            <span className="block text-sm font-bold text-white truncate leading-tight">
+              Washington School
+            </span>
+            <span className="block text-[10px] text-blue-400 font-medium tracking-wider uppercase">
+              Admin Portal
+            </span>
+          </div>
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-1">
@@ -77,8 +93,21 @@ export default function AdminLayout({
       {/* Main Admin Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between">
-          <span className="text-sm font-semibold text-slate-700">School Library Management System</span>
-          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2.5 py-0.5 font-medium">
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-7 h-7 rounded-full overflow-hidden shrink-0 border border-slate-200">
+              <Image
+                src="/logo.png"
+                alt="Washington School Philippines"
+                width={28}
+                height={28}
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <span className="text-sm font-semibold text-slate-800">
+              Washington School Philippines • Library Management System
+            </span>
+          </div>
+          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded-md px-2.5 py-1 font-medium">
             Admin Mode
           </span>
         </header>

@@ -6,7 +6,6 @@ import Image from "next/image";
 import {
   Search,
   BookOpen,
-  Library,
   ShieldCheck,
   CheckCircle2,
   XCircle,
@@ -54,16 +53,23 @@ export default function PublicCatalogPage() {
       {/* Navbar */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="p-2 bg-blue-600 text-white rounded-lg group-hover:bg-blue-700 transition">
-              <Library className="h-5 w-5" />
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="relative w-10 h-10 rounded-full overflow-hidden bg-white shadow-sm ring-2 ring-blue-600/20 group-hover:ring-blue-600/40 transition shrink-0">
+              <Image
+                src="/logo.png"
+                alt="Washington School Philippines Logo"
+                width={40}
+                height={40}
+                className="w-full h-full object-contain p-0.5"
+                priority
+              />
             </div>
             <div>
               <span className="font-bold text-slate-900 text-base sm:text-lg tracking-tight block leading-none">
-                WSI Library
+                Washington School
               </span>
               <span className="text-[10px] text-slate-500 tracking-wider uppercase font-medium">
-                Public Catalog (OPAC)
+                Philippines • Library (OPAC)
               </span>
             </div>
           </Link>
@@ -89,19 +95,31 @@ export default function PublicCatalogPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-b from-blue-900 via-slate-900 to-slate-900 text-white py-16 px-4 sm:px-6 lg:px-8">
+      <section className="bg-gradient-to-b from-blue-950 via-slate-900 to-slate-900 text-white py-14 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-medium">
-            <BookOpen className="h-3.5 w-3.5" />
-            <span>Online Public Access Catalog</span>
+          <div className="flex flex-col items-center justify-center">
+            <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden bg-white p-1.5 shadow-2xl ring-4 ring-white/20 mb-4 transition-transform hover:scale-105">
+              <Image
+                src="/logo.png"
+                alt="Washington School Philippines Official Seal"
+                width={128}
+                height={128}
+                className="w-full h-full object-contain"
+                priority
+              />
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-medium">
+              <BookOpen className="h-3.5 w-3.5" />
+              <span>Online Public Access Catalog</span>
+            </div>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-            Welcome to Washington School International Library
+            Washington School Philippines
           </h1>
 
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto">
-            Discover books, explore author collections, view physical shelf availability, and find your next great read.
+            Welcome to the Library Management System. Discover books, explore author collections, view physical shelf availability, and find your next great read.
           </p>
 
           {/* Prominent Search Bar */}
@@ -320,10 +338,18 @@ export default function PublicCatalogPage() {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-8 px-4 sm:px-6 lg:px-8 mt-12">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <Library className="h-4 w-4 text-blue-600" />
+          <div className="flex items-center gap-2.5">
+            <div className="relative w-6 h-6 rounded-full overflow-hidden bg-white shadow-xs shrink-0 ring-1 ring-slate-200">
+              <Image
+                src="/logo.png"
+                alt="Washington School Philippines"
+                width={24}
+                height={24}
+                className="w-full h-full object-contain"
+              />
+            </div>
             <span>
-              &copy; {new Date().getFullYear()} Washington School International Library. All rights reserved.
+              &copy; {new Date().getFullYear()} Washington School Philippines. All rights reserved.
             </span>
           </div>
 

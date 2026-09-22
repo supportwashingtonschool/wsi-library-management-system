@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  Library,
   User,
   BookOpen,
   Calendar,
@@ -137,16 +136,22 @@ export default function StudentPortalPage() {
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <div className="p-2 bg-blue-600 text-white rounded-lg group-hover:bg-blue-700 transition">
-                <Library className="h-5 w-5" />
+            <Link href="/" className="flex items-center gap-3 group">
+              <div className="relative w-10 h-10 rounded-full overflow-hidden bg-white shadow-sm ring-2 ring-blue-600/20 group-hover:ring-blue-600/40 transition shrink-0">
+                <Image
+                  src="/logo.png"
+                  alt="Washington School Philippines Logo"
+                  width={40}
+                  height={40}
+                  className="w-full h-full object-contain p-0.5"
+                />
               </div>
               <div>
                 <span className="font-bold text-slate-900 text-base sm:text-lg tracking-tight block leading-none">
-                  WSI Library
+                  Washington School
                 </span>
                 <span className="text-[10px] text-blue-600 font-semibold tracking-wider uppercase">
-                  Student Portal
+                  Student Library Portal
                 </span>
               </div>
             </Link>
@@ -182,9 +187,16 @@ export default function StudentPortalPage() {
           <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 sm:p-6 lg:p-8 bg-gradient-to-b from-blue-50/50 via-slate-50 to-slate-100">
             <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-xl shadow-slate-200/50 p-6 sm:p-8">
               {/* Portal Icon & Title */}
-              <div className="text-center space-y-2 mb-8">
-                <div className="inline-flex p-3 rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-500/30 mb-2">
-                  <GraduationCap className="h-8 w-8" />
+              <div className="text-center space-y-3 mb-8">
+                <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden bg-white p-1 shadow-xl ring-4 ring-blue-100 mb-2">
+                  <Image
+                    src="/logo.png"
+                    alt="Washington School Philippines Official Seal"
+                    width={96}
+                    height={96}
+                    className="w-full h-full object-contain"
+                    priority
+                  />
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                   Student Portal
@@ -284,25 +296,36 @@ export default function StudentPortalPage() {
                 <div className="absolute right-0 top-0 translate-x-1/4 -translate-y-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
 
                 <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                  <div className="space-y-3">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/30 text-blue-200 text-xs font-semibold uppercase tracking-wider border border-blue-400/30">
-                      <GraduationCap className="h-3.5 w-3.5 text-blue-300" />
-                      <span>{student.grade_level || "Student"}</span>
+                  <div className="flex items-center gap-4 sm:gap-5">
+                    <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden bg-white p-1 shadow-lg ring-2 ring-white/30 shrink-0">
+                      <Image
+                        src="/logo.png"
+                        alt="Washington School Philippines Official Seal"
+                        width={80}
+                        height={80}
+                        className="w-full h-full object-contain"
+                      />
                     </div>
+                    <div className="space-y-2">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/30 text-blue-200 text-xs font-semibold uppercase tracking-wider border border-blue-400/30">
+                        <GraduationCap className="h-3.5 w-3.5 text-blue-300" />
+                        <span>{student.grade_level || "Student"}</span>
+                      </div>
 
-                    <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
-                      Welcome back, {student.full_name}!
-                    </h1>
+                      <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
+                        Welcome back, {student.full_name}!
+                      </h1>
 
-                    <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
-                      <span className="inline-flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-lg border border-white/10 font-mono text-xs text-blue-200">
-                        <User className="h-3.5 w-3.5" />
-                        ID: {student.library_id}
-                      </span>
-                      <span>•</span>
-                      <span>
-                        Enrolled since {formatDate(student.created_at)}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
+                        <span className="inline-flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-lg border border-white/10 font-mono text-xs text-blue-200">
+                          <User className="h-3.5 w-3.5" />
+                          ID: {student.library_id}
+                        </span>
+                        <span>•</span>
+                        <span>
+                          Enrolled since {formatDate(student.created_at)}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -523,7 +546,7 @@ export default function StudentPortalPage() {
                         Past Reading History
                       </h2>
                       <p className="text-xs text-slate-500">
-                        Record of books you have returned to the Washington School International Library.
+                        Record of books you have returned to the Washington School Philippines Library.
                       </p>
                     </div>
                   </div>
@@ -611,8 +634,19 @@ export default function StudentPortalPage() {
       </main>
 
       {/* Public Footer */}
-      <footer className="bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-400">
-        <p>© Washington School International Library. All rights reserved.</p>
+      <footer className="bg-white border-t border-slate-200 py-6 px-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-xs text-slate-500">
+          <div className="relative w-5 h-5 rounded-full overflow-hidden shrink-0 border border-slate-200">
+            <Image
+              src="/logo.png"
+              alt="Washington School Philippines"
+              width={20}
+              height={20}
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <span>&copy; {new Date().getFullYear()} Washington School Philippines. All rights reserved.</span>
+        </div>
       </footer>
     </div>
   );
