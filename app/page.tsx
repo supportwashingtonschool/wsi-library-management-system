@@ -115,7 +115,7 @@ export default function PublicCatalogPage() {
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-            Washington School Philippines
+            Washington School Learning Resource Center
           </h1>
 
           <p className="text-sm sm:text-base text-slate-300 max-w-2xl mx-auto">
