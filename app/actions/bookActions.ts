@@ -1,6 +1,7 @@
 "use server";
 
 import { supabase } from "@/lib/supabase";
+import { revalidatePath } from "next/cache";
 
 export interface BookMetadata {
   isbn: string;
@@ -308,6 +309,12 @@ export async function saveBook(
     if (insertError) {
       return { success: false, error: `Failed to create physical copy records: ${insertError.message}` };
     }
+
+    // Revalidate dashboard and inventory paths so fresh data loads instantly
+    revalidatePath("/admin");
+    revalidatePath("/admin/cataloging");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/");
 
     return {
       success: true,

@@ -1,6 +1,7 @@
 "use server";
 
 import { supabase } from "@/lib/supabase";
+import { revalidatePath } from "next/cache";
 
 export interface CheckoutResult {
   success: boolean;
@@ -149,6 +150,11 @@ export async function checkoutBook(
       year: "numeric",
     });
 
+    revalidatePath("/admin");
+    revalidatePath("/admin/circulation");
+    revalidatePath("/student");
+    revalidatePath("/");
+
     return {
       success: true,
       message: `Successfully checked out "${title}" (${book.accession_number}) to ${student.full_name} (${student.library_id}). Due back on ${formattedDue}.`,
@@ -245,6 +251,11 @@ export async function returnBook(accessionNumber: string): Promise<ReturnResult>
     const borrower = (activeLoan?.Students as { full_name?: string })?.full_name
       ? ` (previously borrowed by ${(activeLoan?.Students as { full_name?: string })?.full_name})`
       : "";
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/circulation");
+    revalidatePath("/student");
+    revalidatePath("/");
 
     return {
       success: true,

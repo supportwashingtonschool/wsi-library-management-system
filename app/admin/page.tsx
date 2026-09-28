@@ -10,17 +10,22 @@ import {
   BookMarked,
 } from "lucide-react";
 import { getDashboardData } from "@/app/actions/dashboardActions";
+import RefreshDashboardButton from "./RefreshDashboardButton";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 export default async function AdminDashboardPage() {
   const result = await getDashboardData();
   const {
     totalCataloged,
+    totalTitles,
     activeLoans,
     studentsEnrolled,
     overdueItems,
     recentLoans,
+    auditTimestamp,
   } = result.data;
 
   const formatDate = (dateStr?: string | null): string => {
@@ -56,7 +61,9 @@ export default async function AdminDashboardPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshDashboardButton lastUpdated={auditTimestamp} />
+
           <Link
             href="/admin/circulation"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3.5 py-2 rounded-lg transition shadow-sm"
@@ -74,12 +81,21 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* Error / Fallback Notice if database lookup had an issue */}
+      {!result.success && (
+        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+          <span>Notice: Could not load real-time database stats ({result.error}). Showing cached fallback.</span>
+        </div>
+      )}
+
       {/* 4 Metric Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Cataloged */}
         <Link
-          href="/admin/cataloging"
+          href="/admin/inventory"
           className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-blue-200 transition group flex items-center justify-between"
+          title="Click to view full inventory and physical holdings"
         >
           <div className="flex items-center gap-4">
             <div className="p-3 bg-blue-50 text-blue-600 rounded-xl group-hover:bg-blue-600 group-hover:text-white transition">
@@ -89,11 +105,16 @@ export default async function AdminDashboardPage() {
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Total Cataloged
               </p>
-              <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                {totalCataloged}
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Physical copies in library
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                  {totalCataloged}
+                </span>
+                <span className="text-xs font-medium text-slate-500">
+                  Copies
+                </span>
+              </div>
+              <p className="text-[11px] text-blue-600 font-medium mt-0.5">
+                {totalTitles || 0} unique {totalTitles === 1 ? "title" : "titles"}
               </p>
             </div>
           </div>

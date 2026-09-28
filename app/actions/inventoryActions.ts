@@ -1,6 +1,7 @@
 "use server";
 
 import { supabase } from "@/lib/supabase";
+import { revalidatePath } from "next/cache";
 
 export interface InventoryPhysicalCopy {
   accession_number: string;
@@ -170,6 +171,10 @@ export async function updateMetadata(
       return { success: false, error: error.message };
     }
 
+    revalidatePath("/admin");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/");
+
     return { success: true };
   } catch (err: unknown) {
     const msg =
@@ -206,6 +211,10 @@ export async function updatePhysicalCopy(
     if (error) {
       return { success: false, error: error.message };
     }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/");
 
     return { success: true };
   } catch (err: unknown) {
@@ -281,6 +290,10 @@ export async function deletePhysicalCopy(
     if (deleteError) {
       return { success: false, error: deleteError.message };
     }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/");
 
     return { success: true };
   } catch (err: unknown) {
@@ -391,6 +404,10 @@ export async function deleteBook(
         error: `Failed to delete book metadata: ${deleteMetaErr.message}`,
       };
     }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/");
 
     return { success: true };
   } catch (err: unknown) {
