@@ -289,3 +289,112 @@ export async function deletePhysicalCopy(
     return { success: false, error: msg };
   }
 }
+
+/**
+ * Permanently deletes a book from the catalog (Book_Metadata).
+ * Also safely cleans up all associated physical copies and past loan history,
+ * provided none of its physical copies are currently checked out on an active loan.
+ */
+export async function deleteBook(
+  isbn: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const cleanIsbn = isbn.trim();
+    if (!cleanIsbn) {
+      return { success: false, error: "ISBN is required." };
+    }
+
+    // 1. Verify book exists in Book_Metadata
+    const { data: book, error: bookErr } = await supabase
+      .from("Book_Metadata")
+      .select("isbn, title")
+      .eq("isbn", cleanIsbn)
+      .maybeSingle();
+
+    if (bookErr) {
+      return { success: false, error: `Lookup error: ${bookErr.message}` };
+    }
+    if (!book) {
+      return { success: false, error: `Book with ISBN ${cleanIsbn} not found.` };
+    }
+
+    // 2. Fetch all physical copies linked to this ISBN
+    const { data: copies, error: copyErr } = await supabase
+      .from("Physical_Books")
+      .select("accession_number")
+      .eq("isbn", cleanIsbn);
+
+    if (copyErr) {
+      return { success: false, error: `Failed to check copies: ${copyErr.message}` };
+    }
+
+    const accessionNumbers = (copies || []).map((c) => c.accession_number);
+
+    // 3. If there are physical copies, verify none are actively borrowed
+    if (accessionNumbers.length > 0) {
+      const { data: activeLoans, error: loanErr } = await supabase
+        .from("Loans")
+        .select("id, book_accession, status")
+        .in("book_accession", accessionNumbers)
+        .ilike("status", "active");
+
+      if (loanErr) {
+        return { success: false, error: `Failed to check active loans: ${loanErr.message}` };
+      }
+
+      if (activeLoans && activeLoans.length > 0) {
+        const borrowedAccessions = Array.from(
+          new Set(activeLoans.map((l) => l.book_accession))
+        ).join(", ");
+        return {
+          success: false,
+          error: `Cannot delete "${book.title}" because physical copy (${borrowedAccessions}) is currently on an active loan to a student. Please return the book in the Circulation Desk first.`,
+        };
+      }
+
+      // 4. Remove past returned loans for these physical copies to satisfy foreign key constraints
+      const { error: deleteLoansErr } = await supabase
+        .from("Loans")
+        .delete()
+        .in("book_accession", accessionNumbers);
+
+      if (deleteLoansErr) {
+        return {
+          success: false,
+          error: `Failed to clear historical loan records: ${deleteLoansErr.message}`,
+        };
+      }
+
+      // 5. Delete all physical copies of this book
+      const { error: deleteCopiesErr } = await supabase
+        .from("Physical_Books")
+        .delete()
+        .eq("isbn", cleanIsbn);
+
+      if (deleteCopiesErr) {
+        return {
+          success: false,
+          error: `Failed to delete physical copies: ${deleteCopiesErr.message}`,
+        };
+      }
+    }
+
+    // 6. Delete the book metadata record
+    const { error: deleteMetaErr } = await supabase
+      .from("Book_Metadata")
+      .delete()
+      .eq("isbn", cleanIsbn);
+
+    if (deleteMetaErr) {
+      return {
+        success: false,
+        error: `Failed to delete book metadata: ${deleteMetaErr.message}`,
+      };
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to delete book.";
+    return { success: false, error: msg };
+  }
+}
