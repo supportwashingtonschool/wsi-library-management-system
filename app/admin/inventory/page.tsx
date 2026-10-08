@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import ExcelJS from "exceljs";
 import {
   Database,
   Search,
@@ -203,8 +204,8 @@ export default function InventoryPage() {
     }, 350);
   };
 
-  // Export complete library catalog to CSV
-  const handleExportCSV = async () => {
+  // Export complete library catalog to formatted Excel (.xlsx)
+  const handleExportExcel = async () => {
     try {
       setIsExporting(true);
       const rawBooks = await getAllBooksForExport();
@@ -214,64 +215,118 @@ export default function InventoryPage() {
         return;
       }
 
-      // Helper to escape values with double quotes and escape internal quotes
-      const escapeCsv = (val: unknown): string => {
-        if (val === null || val === undefined) return '""';
-        const str = String(val).trim();
-        return `"${str.replace(/"/g, '""')}"`;
-      };
+      // Create new Excel workbook and landscape worksheet
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Library Catalog", {
+        pageSetup: {
+          orientation: "landscape",
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 0,
+        },
+      });
 
-      const headers = [
-        "Accession Number",
-        "Title",
-        "Author",
-        "ISBN",
-        "Category",
-        "Call Number",
-        "Publisher",
-        "Year",
-        "Status",
+      // Define worksheet columns and widths
+      worksheet.columns = [
+        { header: "Accession Number", key: "accession_number", width: 18 },
+        { header: "Title", key: "title", width: 40 },
+        { header: "Author", key: "author", width: 25 },
+        { header: "ISBN", key: "isbn", width: 20 },
+        { header: "Category", key: "category", width: 20 },
+        { header: "Call Number", key: "call_number", width: 15 },
+        { header: "Publisher", key: "publisher", width: 25 },
+        { header: "Year", key: "year", width: 10 },
+        { header: "Status", key: "status", width: 15 },
       ];
 
-      const rows = rawBooks.map((item) => {
+      // Style header row: bold font, light gray background fill
+      const headerRow = worksheet.getRow(1);
+      headerRow.height = 26;
+      headerRow.font = {
+        bold: true,
+        name: "Calibri",
+        size: 11,
+        color: { argb: "FF0F172A" },
+      };
+      headerRow.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FFE2E8F0" }, // light gray (slate-200)
+      };
+      headerRow.alignment = { vertical: "middle", horizontal: "left" };
+
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FF94A3B8" } },
+          left: { style: "thin", color: { argb: "FF94A3B8" } },
+          bottom: { style: "medium", color: { argb: "FF64748B" } },
+          right: { style: "thin", color: { argb: "FF94A3B8" } },
+        };
+      });
+
+      // Populate data rows
+      rawBooks.forEach((item) => {
         const meta = Array.isArray(item.Book_Metadata)
           ? item.Book_Metadata[0]
           : item.Book_Metadata;
 
-        return [
-          escapeCsv(item.accession_number),
-          escapeCsv(meta?.title),
-          escapeCsv(meta?.author),
-          escapeCsv(item.isbn || meta?.isbn),
-          escapeCsv(meta?.category),
-          escapeCsv(item.call_number),
-          escapeCsv(meta?.publisher),
-          escapeCsv(
+        // Crucial Fix: Ensure ISBN is passed explicitly as a String so Excel doesn't convert to scientific notation
+        const rawIsbn = item.isbn || meta?.isbn || "";
+        const isbnString = String(rawIsbn).trim();
+
+        const row = worksheet.addRow({
+          accession_number: item.accession_number || "",
+          title: meta?.title || "",
+          author: meta?.author || "",
+          isbn: isbnString,
+          category: meta?.category || "",
+          call_number: item.call_number || "",
+          publisher: meta?.publisher || "",
+          year: String(
             meta?.published_year ||
-              (meta as Record<string, unknown> | null)?.publication_year
+              (meta as Record<string, unknown> | null)?.publication_year ||
+              ""
           ),
-          escapeCsv(item.status),
-        ].join(",");
+          status: item.status || "Available",
+        });
+
+        // Set ISBN cell explicitly to text format ('@')
+        const isbnCell = row.getCell("isbn");
+        isbnCell.numFmt = "@";
+        isbnCell.value = isbnString;
+
+        // Apply text wrapping and vertical top alignment
+        row.alignment = { vertical: "top", wrapText: true };
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFE2E8F0" } },
+            left: { style: "thin", color: { argb: "FFE2E8F0" } },
+            bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+            right: { style: "thin", color: { argb: "FFE2E8F0" } },
+          };
+        });
       });
 
-      const csvContent = [headers.join(","), ...rows].join("\r\n");
+      // Generate the file buffer
+      const buffer = await workbook.xlsx.writeBuffer();
 
-      // Prepend UTF-8 BOM so Excel and other tools properly display special characters
-      const blob = new Blob(["\uFEFF" + csvContent], {
-        type: "text/csv;charset=utf-8;",
+      // Trigger download as .xlsx
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", "WSI_Library_Catalog.csv");
+      link.setAttribute("download", "WSI_Library_Catalog.xlsx");
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      console.error("Export catalog CSV error:", err);
+      console.error("Export catalog Excel error:", err);
       const msg =
-        err instanceof Error ? err.message : "Failed to export catalog.";
+        err instanceof Error ? err.message : "Failed to export catalog to Excel.";
       alert(msg);
     } finally {
       setIsExporting(false);
@@ -517,13 +572,13 @@ export default function InventoryPage() {
 
         {/* Header Action Buttons: Export Catalog (CSV) & Batch Print Barcodes */}
         <div className="flex flex-wrap items-center gap-2.5">
-          {/* Export Catalog (CSV) Button */}
+          {/* Export Catalog (Excel) Button */}
           <button
             type="button"
-            onClick={handleExportCSV}
+            onClick={handleExportExcel}
             disabled={isExporting}
             className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Download complete catalog report of all physical copies in CSV format"
+            title="Download complete catalog report formatted for Excel (.xlsx)"
           >
             {isExporting ? (
               <>
@@ -533,7 +588,7 @@ export default function InventoryPage() {
             ) : (
               <>
                 <FileSpreadsheet className="h-4 w-4" />
-                <span>Export Catalog (CSV)</span>
+                <span>Export Catalog (Excel)</span>
               </>
             )}
           </button>
