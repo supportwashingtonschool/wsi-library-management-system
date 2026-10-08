@@ -18,6 +18,17 @@ export interface RegisterStudentResult {
   error?: string;
 }
 
+export interface UpdateStudentResult {
+  success: boolean;
+  student?: Student;
+  error?: string;
+}
+
+export interface DeleteStudentResult {
+  success: boolean;
+  error?: string;
+}
+
 export interface GetStudentsResult {
   success: boolean;
   students: Student[];
@@ -26,7 +37,8 @@ export interface GetStudentsResult {
 
 /**
  * Register a new student:
- * Accepts FormData with fullName, gradeLevel, address, and an optional photo File.
+ * Accepts FormData with fullName, gradeLevel, and an optional photo File.
+ * (Address has been completely removed)
  * Uploads compressed photo to 'student-photos' bucket in Supabase Storage if provided.
  * Generates next sequential library_id (e.g. 'WSI-LRC-S-0001').
  * Inserts student record into Students table.
@@ -37,12 +49,10 @@ export async function registerStudent(
   try {
     const fullName = (formData.get("fullName") || formData.get("full_name") || "") as string;
     const gradeLevel = (formData.get("gradeLevel") || formData.get("grade_level") || "") as string;
-    const address = (formData.get("address") || "") as string;
     const photoEntry = formData.get("photo");
 
     const trimmedName = fullName.trim();
     const trimmedGrade = gradeLevel.trim();
-    const cleanAddress = address?.trim() || null;
 
     if (!trimmedName) {
       return { success: false, error: "Student full name is required." };
@@ -135,35 +145,27 @@ export async function registerStudent(
         };
       }
     } else {
-      // In case a direct photo URL string was provided
       const directUrl = formData.get("photo_url") || formData.get("photoUrl");
       if (typeof directUrl === "string" && directUrl.trim()) {
         publicPhotoUrl = directUrl.trim();
       }
     }
 
-    // 4. Insert student record into Students table
+    // 4. Insert student record into Students table (without address)
     let insertResult = await supabase
       .from("Students")
       .insert({
         library_id: newLibraryId,
         full_name: trimmedName,
         grade_level: trimmedGrade,
-        address: cleanAddress,
         photo_url: publicPhotoUrl,
       })
       .select()
       .single();
 
-    // Fallback: in case database migration hasn't added address/photo_url columns yet
-    if (
-      insertResult.error &&
-      (insertResult.error.message.includes("address") ||
-        insertResult.error.message.includes("photo_url"))
-    ) {
-      console.warn(
-        "Students table missing address/photo_url columns. Fallback to basic insert."
-      );
+    // Fallback: in case photo_url column hasn't been added yet
+    if (insertResult.error && insertResult.error.message.includes("photo_url")) {
+      console.warn("Students table missing photo_url column. Fallback to basic insert.");
       insertResult = await supabase
         .from("Students")
         .insert({
@@ -192,7 +194,6 @@ export async function registerStudent(
         library_id: newLibraryId,
         full_name: trimmedName,
         grade_level: trimmedGrade,
-        address: cleanAddress,
         photo_url: publicPhotoUrl,
       },
     };
@@ -201,6 +202,171 @@ export async function registerStudent(
       err instanceof Error
         ? err.message
         : "An unexpected error occurred while registering the student.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Update an existing student's details:
+ * Updates fullName and gradeLevel.
+ * If a new photo File is provided, uploads it to 'student-photos' bucket and updates photo_url.
+ * If no photo is provided, keeps existing photo_url.
+ */
+export async function updateStudent(
+  libraryId: string,
+  formData: FormData
+): Promise<UpdateStudentResult> {
+  try {
+    const cleanId = libraryId.trim();
+    if (!cleanId) {
+      return { success: false, error: "Student Library ID is required." };
+    }
+
+    const fullName = (formData.get("fullName") || formData.get("full_name") || "") as string;
+    const gradeLevel = (formData.get("gradeLevel") || formData.get("grade_level") || "") as string;
+    const photoEntry = formData.get("photo");
+
+    const trimmedName = fullName.trim();
+    const trimmedGrade = gradeLevel.trim();
+
+    if (!trimmedName) {
+      return { success: false, error: "Student full name is required." };
+    }
+    if (!trimmedGrade) {
+      return { success: false, error: "Grade level or section is required." };
+    }
+
+    const updatePayload: { full_name: string; grade_level: string; photo_url?: string } = {
+      full_name: trimmedName,
+      grade_level: trimmedGrade,
+    };
+
+    // If new photo File is provided, upload it to 'student-photos'
+    const isFile =
+      photoEntry &&
+      typeof photoEntry === "object" &&
+      "size" in photoEntry &&
+      (photoEntry as File).size > 0 &&
+      "arrayBuffer" in photoEntry;
+
+    if (isFile) {
+      try {
+        const photoFile = photoEntry as File;
+        const originalName = photoFile.name || "photo.jpg";
+        const dotIndex = originalName.lastIndexOf(".");
+        const ext = dotIndex !== -1 ? originalName.substring(dotIndex + 1).toLowerCase() : "jpg";
+        const fileName = `${Date.now()}.${ext}`;
+
+        const arrayBuffer = await photoFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        const { error: uploadError } = await supabase.storage
+          .from("student-photos")
+          .upload(fileName, buffer, {
+            contentType: photoFile.type || "image/jpeg",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error("Storage upload error during student update:", uploadError);
+          return {
+            success: false,
+            error: `Failed to upload new photo: ${uploadError.message}`,
+          };
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("student-photos")
+          .getPublicUrl(fileName);
+
+        updatePayload.photo_url = publicUrlData.publicUrl;
+      } catch (uploadErr) {
+        const msg =
+          uploadErr instanceof Error
+            ? uploadErr.message
+            : "Unknown error during photo upload";
+        return {
+          success: false,
+          error: `Storage upload failed: ${msg}`,
+        };
+      }
+    }
+
+    const { data, error } = await supabase
+      .from("Students")
+      .update(updatePayload)
+      .eq("library_id", cleanId)
+      .select()
+      .single();
+
+    if (error) {
+      return {
+        success: false,
+        error: `Failed to update student: ${error.message}`,
+      };
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/students");
+
+    return {
+      success: true,
+      student: data,
+    };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Failed to update student.";
+    return { success: false, error: message };
+  }
+}
+
+/**
+ * Delete a student by Library ID.
+ */
+export async function deleteStudent(libraryId: string): Promise<DeleteStudentResult> {
+  try {
+    const cleanId = libraryId.trim();
+    if (!cleanId) {
+      return { success: false, error: "Student Library ID is required." };
+    }
+
+    // Check for active loans
+    const { data: loans, error: checkLoansErr } = await supabase
+      .from("Loans")
+      .select("id, status")
+      .eq("student_id", cleanId);
+
+    if (checkLoansErr) {
+      console.warn("Could not check student loans before deletion:", checkLoansErr.message);
+    } else if (loans && loans.length > 0) {
+      const activeLoans = loans.filter((l) => l.status === "active" || l.status === "overdue");
+      if (activeLoans.length > 0) {
+        return {
+          success: false,
+          error: `Cannot delete student: this student has ${activeLoans.length} active or overdue book loan(s). Please return the books first.`,
+        };
+      }
+    }
+
+    const { error } = await supabase
+      .from("Students")
+      .delete()
+      .eq("library_id", cleanId);
+
+    if (error) {
+      return {
+        success: false,
+        error: `Failed to delete student: ${error.message}`,
+      };
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/students");
+
+    return { success: true };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Failed to delete student.";
     return { success: false, error: message };
   }
 }

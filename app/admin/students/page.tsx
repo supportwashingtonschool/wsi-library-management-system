@@ -11,20 +11,23 @@ import {
   RefreshCw,
   GraduationCap,
   Printer,
-  MapPin,
+  Pencil,
+  Trash2,
   X,
 } from "lucide-react";
 import {
   registerStudent,
+  updateStudent,
+  deleteStudent,
   getStudents,
   type Student,
 } from "@/app/actions/studentActions";
 import StudentIdCard from "@/components/StudentIdCard";
 
 export default function StudentsPage() {
+  // Registration Form State
   const [fullName, setFullName] = useState("");
   const [gradeLevel, setGradeLevel] = useState("");
-  const [address, setAddress] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [compressionInfo, setCompressionInfo] = useState<string | null>(null);
@@ -36,10 +39,24 @@ export default function StudentsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [lastRegistered, setLastRegistered] = useState<Student | null>(null);
 
+  // Student Directory State
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [printingStudent, setPrintingStudent] = useState<Student | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Edit Modal State
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editFullName, setEditFullName] = useState("");
+  const [editGradeLevel, setEditGradeLevel] = useState("");
+  const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
+  const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
+  const [editCompressionInfo, setEditCompressionInfo] = useState<string | null>(null);
+  const [isEditCompressing, setIsEditCompressing] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Load students from database
   const loadStudents = useCallback(async () => {
@@ -64,7 +81,7 @@ export default function StudentsPage() {
     };
   }, [photoPreview]);
 
-  // Handle image selection and client-side compression
+  // Handle image selection and client-side compression for enrollment
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -111,7 +128,7 @@ export default function StudentsPage() {
     }
   };
 
-  // Handle student registration using FormData
+  // Handle student registration using FormData (address removed)
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim() || !gradeLevel.trim()) {
@@ -132,7 +149,6 @@ export default function StudentsPage() {
       const formData = new FormData();
       formData.append("fullName", fullName.trim());
       formData.append("gradeLevel", gradeLevel.trim());
-      formData.append("address", address.trim());
       if (photoFile) {
         formData.append("photo", photoFile, photoFile.name);
       }
@@ -149,15 +165,135 @@ export default function StudentsPage() {
         setLastRegistered(result.student);
         setFullName("");
         setGradeLevel("");
-        setAddress("");
         handleClearPhoto();
-        // Reload student list
         loadStudents();
       }
     } catch (err) {
       setIsSubmitting(false);
       const msg = err instanceof Error ? err.message : "Failed to register student.";
       setErrorMessage(msg);
+    }
+  };
+
+  // Open Edit Modal
+  const handleOpenEdit = (student: Student) => {
+    setEditingStudent(student);
+    setEditFullName(student.full_name);
+    setEditGradeLevel(student.grade_level);
+    setEditPhotoFile(null);
+    setEditPhotoPreview(student.photo_url || null);
+    setEditCompressionInfo(null);
+    setEditError(null);
+  };
+
+  // Close Edit Modal
+  const handleCloseEdit = () => {
+    if (editPhotoPreview && editPhotoPreview !== editingStudent?.photo_url) {
+      URL.revokeObjectURL(editPhotoPreview);
+    }
+    setEditingStudent(null);
+    setEditPhotoFile(null);
+    setEditPhotoPreview(null);
+    setEditCompressionInfo(null);
+    setEditError(null);
+  };
+
+  // Handle image selection and client-side compression for editing
+  const handleEditPhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsEditCompressing(true);
+    setEditError(null);
+
+    try {
+      const options = {
+        maxSizeMB: 0.1, // 100 KB limit
+        maxWidthOrHeight: 500,
+        useWebWorker: true,
+      };
+
+      const compressedFile = await imageCompression(file, options);
+      setEditPhotoFile(compressedFile);
+      setEditCompressionInfo(
+        `${(file.size / 1024).toFixed(0)}KB → ${(compressedFile.size / 1024).toFixed(0)}KB`
+      );
+
+      if (editPhotoPreview && editPhotoPreview !== editingStudent?.photo_url) {
+        URL.revokeObjectURL(editPhotoPreview);
+      }
+      const newPreviewUrl = URL.createObjectURL(compressedFile);
+      setEditPhotoPreview(newPreviewUrl);
+    } catch (err) {
+      console.error("Image compression error in edit:", err);
+      setEditError("Failed to compress image. Please choose another file.");
+    } finally {
+      setIsEditCompressing(false);
+    }
+  };
+
+  // Submit Edit Form
+  const handleUpdateStudentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    if (!editFullName.trim() || !editGradeLevel.trim()) {
+      setEditError("Please provide both full name and grade/section.");
+      return;
+    }
+
+    if (isEditCompressing) {
+      setEditError("Please wait for photo compression to finish.");
+      return;
+    }
+
+    setIsUpdating(true);
+    setEditError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("fullName", editFullName.trim());
+      formData.append("gradeLevel", editGradeLevel.trim());
+      if (editPhotoFile) {
+        formData.append("photo", editPhotoFile, editPhotoFile.name);
+      }
+
+      const result = await updateStudent(editingStudent.library_id, formData);
+      setIsUpdating(false);
+
+      if (!result.success || !result.student) {
+        setEditError(result.error || "Failed to update student.");
+      } else {
+        if (lastRegistered?.library_id === editingStudent.library_id) {
+          setLastRegistered(result.student);
+        }
+        handleCloseEdit();
+        loadStudents();
+      }
+    } catch (err) {
+      setIsUpdating(false);
+      setEditError(err instanceof Error ? err.message : "Failed to update student.");
+    }
+  };
+
+  // Delete Student
+  const handleDeleteStudent = async (student: Student) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${student.full_name} (${student.library_id})?`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(student.library_id);
+    const result = await deleteStudent(student.library_id);
+    setDeletingId(null);
+
+    if (!result.success) {
+      alert(result.error || "Failed to delete student.");
+    } else {
+      if (lastRegistered?.library_id === student.library_id) {
+        setLastRegistered(null);
+        setSuccessMessage(null);
+      }
+      loadStudents();
     }
   };
 
@@ -181,14 +317,13 @@ export default function StudentsPage() {
     }, 150);
   };
 
-  // Filter students by name, grade, or ID
+  // Filter students by name, grade, or ID (address removed)
   const filteredStudents = students.filter((s) => {
     const query = searchQuery.toLowerCase();
     return (
       s.full_name.toLowerCase().includes(query) ||
       s.grade_level.toLowerCase().includes(query) ||
-      s.library_id.toLowerCase().includes(query) ||
-      (s.address && s.address.toLowerCase().includes(query))
+      s.library_id.toLowerCase().includes(query)
     );
   });
 
@@ -240,7 +375,7 @@ export default function StudentsPage() {
             type="button"
             onClick={handleBatchPrint}
             disabled={students.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[#7A2828] hover:bg-[#601F1F] rounded-xl shadow-sm transition disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[#7A2828] hover:bg-[#601F1F] rounded-xl shadow-sm transition disabled:opacity-50 cursor-pointer"
             title="Batch print all student ID cards"
           >
             <Printer className="h-4 w-4" />
@@ -290,23 +425,6 @@ export default function StudentsPage() {
                 <p className="text-[10px] text-slate-400 mt-1">
                   Sequential ID (e.g. WSI-LRC-S-0001) will be assigned automatically.
                 </p>
-              </div>
-
-              {/* Address */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Address
-                </label>
-                <div className="relative">
-                  <MapPin className="h-3.5 w-3.5 absolute left-3 top-3 text-slate-400" />
-                  <input
-                    type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="e.g. B9 L5 Terraverde Res. Carmona City"
-                    className="w-full pl-8 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
               </div>
 
               {/* Student Photo File Upload with client-side compression */}
@@ -374,8 +492,8 @@ export default function StudentsPage() {
 
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg text-sm font-semibold transition disabled:opacity-50 shadow-sm mt-2"
+                disabled={isSubmitting || isCompressing}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg text-sm font-semibold transition disabled:opacity-50 shadow-sm mt-2 cursor-pointer"
               >
                 {isSubmitting ? (
                   <>
@@ -412,7 +530,7 @@ export default function StudentsPage() {
                   <button
                     type="button"
                     onClick={() => handlePrintSingle(lastRegistered)}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-[#7A2828] text-white px-2.5 py-1 rounded-lg hover:bg-[#601F1F] transition shadow-xs"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold bg-[#7A2828] text-white px-2.5 py-1 rounded-lg hover:bg-[#601F1F] transition shadow-xs cursor-pointer"
                     title="Print ID card immediately"
                   >
                     <Printer className="h-3 w-3" />
@@ -452,7 +570,7 @@ export default function StudentsPage() {
               </div>
             </div>
 
-            {/* Table */}
+            {/* Table (Address column removed) */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-700">
                 <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -460,21 +578,20 @@ export default function StudentsPage() {
                     <th className="px-4 py-3">Library ID</th>
                     <th className="px-4 py-3">Full Name</th>
                     <th className="px-4 py-3">Grade / Section</th>
-                    <th className="px-4 py-3">Address</th>
                     <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
+                      <td colSpan={4} className="px-5 py-8 text-center text-slate-400">
                         <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-slate-400" />
                         <span>Loading student records...</span>
                       </td>
                     </tr>
                   ) : filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
+                      <td colSpan={4} className="px-5 py-8 text-center text-slate-400">
                         {searchQuery ? "No students match your search." : "No students registered yet."}
                       </td>
                     </tr>
@@ -488,7 +605,7 @@ export default function StudentsPage() {
                         </td>
                         <td className="px-4 py-3.5 font-medium text-slate-900">
                           <div className="flex items-center gap-2.5">
-                            <div className="relative w-7 h-7 rounded-full overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
                               {s.photo_url ? (
                                 /* eslint-disable-next-line @next/next/no-img-element */
                                 <img
@@ -497,7 +614,7 @@ export default function StudentsPage() {
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <span className="text-[10px] font-bold text-slate-500">
+                                <span className="text-[11px] font-bold text-slate-500">
                                   {s.full_name.charAt(0).toUpperCase()}
                                 </span>
                               )}
@@ -508,19 +625,46 @@ export default function StudentsPage() {
                         <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap">
                           {s.grade_level}
                         </td>
-                        <td className="px-4 py-3.5 text-slate-500 text-xs max-w-[180px] truncate" title={s.address || ""}>
-                          {s.address || "—"}
-                        </td>
                         <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={() => handlePrintSingle(s)}
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2.5 py-1 rounded-md transition shadow-2xs"
-                            title={`Print ID card for ${s.full_name}`}
-                          >
-                            <Printer className="h-3.5 w-3.5 text-blue-600" />
-                            <span>Print ID</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* Print ID Button */}
+                            <button
+                              type="button"
+                              onClick={() => handlePrintSingle(s)}
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2.5 py-1 rounded-md transition shadow-2xs cursor-pointer"
+                              title={`Print ID card for ${s.full_name}`}
+                            >
+                              <Printer className="h-3.5 w-3.5 text-blue-600" />
+                              <span className="hidden sm:inline">Print ID</span>
+                            </button>
+
+                            {/* Edit Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(s)}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-md transition shadow-2xs cursor-pointer"
+                              title={`Edit ${s.full_name}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5 text-blue-600" />
+                              <span className="hidden md:inline">Edit</span>
+                            </button>
+
+                            {/* Delete Button */}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteStudent(s)}
+                              disabled={deletingId === s.library_id}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-md transition shadow-2xs disabled:opacity-50 cursor-pointer"
+                              title={`Delete ${s.full_name}`}
+                            >
+                              {deletingId === s.library_id ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-600" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                              )}
+                              <span className="hidden md:inline">Delete</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -531,6 +675,181 @@ export default function StudentsPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Student Modal */}
+      {editingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
+              <div className="flex items-center gap-2">
+                <Pencil className="h-4 w-4 text-blue-600" />
+                <h3 className="text-sm font-bold text-slate-800">
+                  Edit Student Details
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseEdit}
+                disabled={isUpdating || isEditCompressing}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200/50 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleUpdateStudentSubmit} className="p-6 space-y-4">
+              {/* Permanent ID */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">
+                  Library ID (Permanent)
+                </label>
+                <div className="font-mono text-xs font-bold text-blue-700 bg-blue-50/70 border border-blue-200 px-3 py-2 rounded-lg">
+                  {editingStudent.library_id}
+                </div>
+              </div>
+
+              {/* Full Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Grade Level */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Grade Level / Section <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editGradeLevel}
+                  onChange={(e) => setEditGradeLevel(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Edit Photo File Upload with compression */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Update Photo <span className="text-slate-400 font-normal">(optional)</span>
+                  </label>
+                  {editCompressionInfo && (
+                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Compressed: {editCompressionInfo}
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  ref={editFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleEditPhotoSelect}
+                  disabled={isUpdating || isEditCompressing}
+                  className="w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border border-slate-300 rounded-lg p-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                />
+
+                {isEditCompressing && (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-blue-600">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Compressing photo to &le;100KB...</span>
+                  </div>
+                )}
+
+                {/* Current / Newly Compressed Photo Preview */}
+                {editPhotoPreview && !isEditCompressing && (
+                  <div className="mt-2.5 p-2 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-white shadow-2xs">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={editPhotoPreview}
+                          alt="Student preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="min-w-0 text-left">
+                        <p className="text-xs font-semibold text-slate-800 truncate">
+                          {editPhotoFile ? editPhotoFile.name : "Current Photo"}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {editPhotoFile ? "Ready to upload" : "Saved in system"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {editPhotoFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (editPhotoPreview && editPhotoPreview !== editingStudent.photo_url) {
+                            URL.revokeObjectURL(editPhotoPreview);
+                          }
+                          setEditPhotoFile(null);
+                          setEditPhotoPreview(editingStudent.photo_url || null);
+                          setEditCompressionInfo(null);
+                          if (editFileInputRef.current) {
+                            editFileInputRef.current.value = "";
+                          }
+                        }}
+                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-md hover:bg-white transition cursor-pointer"
+                        title="Revert photo selection"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Edit Error Message */}
+              {editError && (
+                <div className="flex items-start gap-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 p-3 rounded-lg">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-500 mt-0.5" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleCloseEdit}
+                  disabled={isUpdating || isEditCompressing}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdating || isEditCompressing}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm transition disabled:opacity-50 cursor-pointer"
+                >
+                  {isUpdating ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Changes</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Hidden Print Layout for window.print() */}
       <div

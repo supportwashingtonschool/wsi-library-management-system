@@ -64,33 +64,26 @@ export default function StudentIdCard({ student }: StudentIdCardProps) {
             </div>
 
             {/* Student Information Fields */}
-            <div className="flex-1 min-w-0 text-[7px] space-y-0.5 leading-snug">
+            <div className="flex-1 min-w-0 text-[7.5px] space-y-1.5 leading-snug">
               <div className="flex items-start">
-                <span className="w-11 text-slate-500 font-semibold uppercase">Name</span>
+                <span className="w-12 text-slate-500 font-semibold uppercase">Name</span>
                 <span className="text-slate-600 font-bold mr-1">:</span>
-                <span className="font-extrabold text-slate-900 truncate uppercase text-[7.5px] flex-1">
+                <span className="font-extrabold text-slate-900 truncate uppercase text-[8px] flex-1">
                   {student.full_name}
                 </span>
               </div>
               <div className="flex items-start">
-                <span className="w-11 text-slate-500 font-semibold uppercase">Student ID</span>
+                <span className="w-12 text-slate-500 font-semibold uppercase">Student ID</span>
                 <span className="text-slate-600 font-bold mr-1">:</span>
-                <span className="font-mono font-black text-[#7A2828] text-[7.5px] flex-1">
+                <span className="font-mono font-black text-[#7A2828] text-[8px] flex-1">
                   {student.library_id}
                 </span>
               </div>
               <div className="flex items-start">
-                <span className="w-11 text-slate-500 font-semibold uppercase">Grade</span>
+                <span className="w-12 text-slate-500 font-semibold uppercase">Grade</span>
                 <span className="text-slate-600 font-bold mr-1">:</span>
-                <span className="font-bold text-slate-800 flex-1 truncate">
+                <span className="font-bold text-slate-800 flex-1 truncate text-[7.5px]">
                   {student.grade_level}
-                </span>
-              </div>
-              <div className="flex items-start">
-                <span className="w-11 text-slate-500 font-semibold uppercase">Address</span>
-                <span className="text-slate-600 font-bold mr-1">:</span>
-                <span className="text-slate-700 text-[6px] leading-tight line-clamp-2 flex-1 font-medium">
-                  {student.address || "Carmona, Cavite"}
                 </span>
               </div>
             </div>
