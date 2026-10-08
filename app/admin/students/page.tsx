@@ -203,6 +203,8 @@ export default function StudentsPage() {
           #printable-student-ids,
           #printable-student-ids * {
             visibility: visible;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           #printable-student-ids {
             position: absolute;
@@ -215,6 +217,8 @@ export default function StudentsPage() {
             gap: 24px !important;
             padding: 20px 0 !important;
             margin: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>

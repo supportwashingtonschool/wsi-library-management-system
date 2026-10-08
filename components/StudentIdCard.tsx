@@ -12,7 +12,10 @@ interface StudentIdCardProps {
 
 export default function StudentIdCard({ student }: StudentIdCardProps) {
   return (
-    <div className="inline-flex flex-row items-center gap-0 bg-white p-2 rounded-xl border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none print:rounded-none select-none break-inside-avoid">
+    <div
+      style={{ WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+      className="inline-flex flex-row items-center gap-0 bg-white p-2 rounded-xl border border-slate-200 shadow-sm print:p-0 print:border-none print:shadow-none print:rounded-none select-none break-inside-avoid"
+    >
       {/* ================= FRONT SIDE ================= */}
       <div className="w-[3.375in] h-[2.125in] bg-white border border-slate-300 rounded-lg overflow-hidden relative flex flex-col justify-between shrink-0 box-border shadow-xs print:shadow-none print:border-slate-400">
         {/* Top Header Banner */}
