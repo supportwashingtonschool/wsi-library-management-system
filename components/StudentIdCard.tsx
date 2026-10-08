@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { User } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
+import Barcode from "react-barcode";
 import type { Student } from "@/app/actions/studentActions";
 
 interface StudentIdCardProps {
@@ -37,66 +37,73 @@ export default function StudentIdCard({ student }: StudentIdCardProps) {
         </div>
 
         {/* Card Body with Wave Background */}
-        <div className="flex-1 px-2.5 py-1.5 flex items-center gap-2 relative bg-gradient-to-br from-pink-50/50 via-white to-rose-50/30 overflow-hidden">
+        <div className="flex-1 px-2.5 pt-1.5 pb-1 flex flex-col justify-between relative bg-gradient-to-br from-pink-50/50 via-white to-rose-50/30 overflow-hidden">
           {/* Subtle Decorative Curves in Background */}
           <div className="absolute right-0 bottom-0 w-32 h-20 bg-rose-200/20 rounded-full blur-xl pointer-events-none" />
 
-          {/* Student Photo */}
-          <div className="relative w-[0.85in] h-[0.85in] rounded-lg overflow-hidden bg-slate-100 border-2 border-[#7A2828]/25 shadow-xs shrink-0 flex items-center justify-center">
-            {student.photo_url ? (
-              <Image
-                src={student.photo_url}
-                alt={student.full_name}
-                fill
-                unoptimized
-                className="object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400">
-                <User className="w-7 h-7 text-slate-400" />
+          {/* Top Section: Photo and Student Details Side by Side */}
+          <div className="flex items-center gap-2 relative z-10">
+            {/* Student Photo */}
+            <div className="relative w-[0.75in] h-[0.75in] rounded-lg overflow-hidden bg-slate-100 border-2 border-[#7A2828]/25 shadow-xs shrink-0 flex items-center justify-center">
+              {student.photo_url ? (
+                <Image
+                  src={student.photo_url}
+                  alt={student.full_name}
+                  fill
+                  unoptimized
+                  className="object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400">
+                  <User className="w-6 h-6 text-slate-400" />
+                </div>
+              )}
+            </div>
+
+            {/* Student Information Fields */}
+            <div className="flex-1 min-w-0 text-[7px] space-y-0.5 leading-snug">
+              <div className="flex items-start">
+                <span className="w-11 text-slate-500 font-semibold uppercase">Name</span>
+                <span className="text-slate-600 font-bold mr-1">:</span>
+                <span className="font-extrabold text-slate-900 truncate uppercase text-[7.5px] flex-1">
+                  {student.full_name}
+                </span>
               </div>
-            )}
-          </div>
-
-          {/* Student Information Fields */}
-          <div className="flex-1 min-w-0 text-[7px] space-y-0.5 leading-snug">
-            <div className="flex items-start">
-              <span className="w-11 text-slate-500 font-semibold uppercase">Name</span>
-              <span className="text-slate-600 font-bold mr-1">:</span>
-              <span className="font-extrabold text-slate-900 truncate uppercase text-[7.5px] flex-1">
-                {student.full_name}
-              </span>
-            </div>
-            <div className="flex items-start">
-              <span className="w-11 text-slate-500 font-semibold uppercase">Student ID</span>
-              <span className="text-slate-600 font-bold mr-1">:</span>
-              <span className="font-mono font-black text-[#7A2828] text-[7.5px] flex-1">
-                {student.library_id}
-              </span>
-            </div>
-            <div className="flex items-start">
-              <span className="w-11 text-slate-500 font-semibold uppercase">Grade</span>
-              <span className="text-slate-600 font-bold mr-1">:</span>
-              <span className="font-bold text-slate-800 flex-1">
-                {student.grade_level}
-              </span>
-            </div>
-            <div className="flex items-start">
-              <span className="w-11 text-slate-500 font-semibold uppercase">Address</span>
-              <span className="text-slate-600 font-bold mr-1">:</span>
-              <span className="text-slate-700 text-[6px] leading-tight line-clamp-2 flex-1 font-medium">
-                {student.address || "Carmona, Cavite"}
-              </span>
+              <div className="flex items-start">
+                <span className="w-11 text-slate-500 font-semibold uppercase">Student ID</span>
+                <span className="text-slate-600 font-bold mr-1">:</span>
+                <span className="font-mono font-black text-[#7A2828] text-[7.5px] flex-1">
+                  {student.library_id}
+                </span>
+              </div>
+              <div className="flex items-start">
+                <span className="w-11 text-slate-500 font-semibold uppercase">Grade</span>
+                <span className="text-slate-600 font-bold mr-1">:</span>
+                <span className="font-bold text-slate-800 flex-1 truncate">
+                  {student.grade_level}
+                </span>
+              </div>
+              <div className="flex items-start">
+                <span className="w-11 text-slate-500 font-semibold uppercase">Address</span>
+                <span className="text-slate-600 font-bold mr-1">:</span>
+                <span className="text-slate-700 text-[6px] leading-tight line-clamp-2 flex-1 font-medium">
+                  {student.address || "Carmona, Cavite"}
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* QR Code Canvas */}
-          <div className="shrink-0 flex flex-col items-center justify-center p-0.5 bg-white rounded border border-slate-200 shadow-xs">
-            <QRCodeCanvas
-              value={student.library_id}
-              size={50}
-              level="M"
-            />
+          {/* Bottom Section: Centered 1D Barcode */}
+          <div className="flex flex-col items-center justify-center relative z-10 w-full overflow-hidden pt-0.5">
+            <div className="bg-white px-2 py-0.5 rounded shadow-2xs border border-slate-100 flex items-center justify-center max-w-full">
+              <Barcode
+                value={student.library_id}
+                width={1.2}
+                height={40}
+                fontSize={12}
+                margin={0}
+              />
+            </div>
           </div>
         </div>
 
