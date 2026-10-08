@@ -13,6 +13,7 @@
     "@supabase/supabase-js": "^2.116.0",
     "lucide-react": "^1.47.0",
     "next": "14.2.35",
+    "qrcode.react": "^4.2.0",
     "react": "^18",
     "react-barcode": "^1.6.1",
     "react-dom": "^18"

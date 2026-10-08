@@ -32,13 +32,19 @@ CREATE TABLE IF NOT EXISTS "Physical_Books" (
 
 -- 3. Students
 -- Stores student borrower information
--- Library ID format: 'WSI-S-0001'
+-- Library ID format: 'WSI-LRC-S-0001' (formerly 'WSI-S-0001')
 CREATE TABLE IF NOT EXISTS "Students" (
     library_id VARCHAR(50) PRIMARY KEY,
     full_name TEXT NOT NULL,
     grade_level VARCHAR(50) NOT NULL,
+    address TEXT,
+    photo_url TEXT,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
 );
+
+-- Schema Migration Commands:
+-- ALTER TABLE "Students" ADD COLUMN IF NOT EXISTS address TEXT;
+-- ALTER TABLE "Students" ADD COLUMN IF NOT EXISTS photo_url TEXT;
 
 -- 4. Loans
 -- Tracks checkout and circulation transactions
