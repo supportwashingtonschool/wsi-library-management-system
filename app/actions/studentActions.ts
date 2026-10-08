@@ -26,20 +26,23 @@ export interface GetStudentsResult {
 
 /**
  * Register a new student:
- * Queries Students table for highest sequential library_id (e.g. 'WSI-LRC-S-0001' or legacy 'WSI-S-0001'),
- * increments it sequentially, and inserts the new student record with address and photo_url.
+ * Accepts FormData with fullName, gradeLevel, address, and an optional photo File.
+ * Uploads compressed photo to 'student-photos' bucket in Supabase Storage if provided.
+ * Generates next sequential library_id (e.g. 'WSI-LRC-S-0001').
+ * Inserts student record into Students table.
  */
 export async function registerStudent(
-  fullName: string,
-  gradeLevel: string,
-  address?: string,
-  photoUrl?: string
+  formData: FormData
 ): Promise<RegisterStudentResult> {
   try {
+    const fullName = (formData.get("fullName") || formData.get("full_name") || "") as string;
+    const gradeLevel = (formData.get("gradeLevel") || formData.get("grade_level") || "") as string;
+    const address = (formData.get("address") || "") as string;
+    const photoEntry = formData.get("photo");
+
     const trimmedName = fullName.trim();
     const trimmedGrade = gradeLevel.trim();
     const cleanAddress = address?.trim() || null;
-    const cleanPhotoUrl = photoUrl?.trim() || null;
 
     if (!trimmedName) {
       return { success: false, error: "Student full name is required." };
@@ -80,7 +83,66 @@ export async function registerStudent(
     const nextSeq = maxNum + 1;
     const newLibraryId = `WSI-LRC-S-${String(nextSeq).padStart(4, "0")}`;
 
-    // 3. Insert student record into Students table
+    // 3. Storage Upload Logic: If photo File exists, upload to 'student-photos' bucket
+    let publicPhotoUrl: string | null = null;
+
+    const isFile =
+      photoEntry &&
+      typeof photoEntry === "object" &&
+      "size" in photoEntry &&
+      (photoEntry as File).size > 0 &&
+      "arrayBuffer" in photoEntry;
+
+    if (isFile) {
+      try {
+        const photoFile = photoEntry as File;
+        const originalName = photoFile.name || "photo.jpg";
+        const dotIndex = originalName.lastIndexOf(".");
+        const ext = dotIndex !== -1 ? originalName.substring(dotIndex + 1).toLowerCase() : "jpg";
+        const fileName = `${Date.now()}.${ext}`;
+
+        const arrayBuffer = await photoFile.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        const { error: uploadError } = await supabase.storage
+          .from("student-photos")
+          .upload(fileName, buffer, {
+            contentType: photoFile.type || "image/jpeg",
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error("Storage upload error:", uploadError);
+          return {
+            success: false,
+            error: `Failed to upload student photo: ${uploadError.message}. Make sure the 'student-photos' bucket exists and is public in Supabase Storage.`,
+          };
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("student-photos")
+          .getPublicUrl(fileName);
+
+        publicPhotoUrl = publicUrlData.publicUrl;
+      } catch (uploadErr) {
+        const msg =
+          uploadErr instanceof Error
+            ? uploadErr.message
+            : "Unknown error during photo upload";
+        return {
+          success: false,
+          error: `Storage upload failed: ${msg}`,
+        };
+      }
+    } else {
+      // In case a direct photo URL string was provided
+      const directUrl = formData.get("photo_url") || formData.get("photoUrl");
+      if (typeof directUrl === "string" && directUrl.trim()) {
+        publicPhotoUrl = directUrl.trim();
+      }
+    }
+
+    // 4. Insert student record into Students table
     let insertResult = await supabase
       .from("Students")
       .insert({
@@ -88,7 +150,7 @@ export async function registerStudent(
         full_name: trimmedName,
         grade_level: trimmedGrade,
         address: cleanAddress,
-        photo_url: cleanPhotoUrl,
+        photo_url: publicPhotoUrl,
       })
       .select()
       .single();
@@ -131,7 +193,7 @@ export async function registerStudent(
         full_name: trimmedName,
         grade_level: trimmedGrade,
         address: cleanAddress,
-        photo_url: cleanPhotoUrl,
+        photo_url: publicPhotoUrl,
       },
     };
   } catch (err: unknown) {

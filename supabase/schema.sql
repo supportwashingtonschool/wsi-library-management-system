@@ -84,3 +84,22 @@ CREATE POLICY "Allow public all access on Students"
 
 CREATE POLICY "Allow public all access on Loans"
     ON "Loans" FOR ALL USING (true) WITH CHECK (true);
+
+-- ==============================================================================
+-- 5. Supabase Storage: 'student-photos' Bucket Configuration
+-- ==============================================================================
+-- Create public storage bucket for student ID photos:
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('student-photos', 'student-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Allow public read access to student photo objects:
+CREATE POLICY "Allow public read on student-photos"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'student-photos');
+
+-- Allow uploads to student-photos:
+CREATE POLICY "Allow public insert on student-photos"
+    ON storage.objects FOR INSERT
+    WITH CHECK (bucket_id = 'student-photos');
+
