@@ -19,6 +19,7 @@ import {
   Library,
   X,
   Inbox,
+  FileSpreadsheet,
 } from "lucide-react";
 import {
   searchInventory,
@@ -27,6 +28,7 @@ import {
   updatePhysicalCopy,
   deletePhysicalCopy,
   deleteBook,
+  getAllBooksForExport,
   type InventoryBook,
   type InventoryPhysicalCopy,
 } from "@/app/actions/inventoryActions";
@@ -83,6 +85,9 @@ export default function InventoryPage() {
   // Batch Print Barcodes State
   const [batchPrintItems, setBatchPrintItems] = useState<BatchPrintItem[]>([]);
   const [isBatchPrintModalOpen, setIsBatchPrintModalOpen] = useState(false);
+
+  // CSV Export State
+  const [isExporting, setIsExporting] = useState(false);
 
   // Perform search with optional category filter
   const handleSearch = useCallback(
@@ -196,6 +201,81 @@ export default function InventoryPage() {
     setTimeout(() => {
       window.print();
     }, 350);
+  };
+
+  // Export complete library catalog to CSV
+  const handleExportCSV = async () => {
+    try {
+      setIsExporting(true);
+      const rawBooks = await getAllBooksForExport();
+
+      if (!rawBooks || rawBooks.length === 0) {
+        alert("No physical books found in the catalog to export.");
+        return;
+      }
+
+      // Helper to escape values with double quotes and escape internal quotes
+      const escapeCsv = (val: unknown): string => {
+        if (val === null || val === undefined) return '""';
+        const str = String(val).trim();
+        return `"${str.replace(/"/g, '""')}"`;
+      };
+
+      const headers = [
+        "Accession Number",
+        "Title",
+        "Author",
+        "ISBN",
+        "Category",
+        "Call Number",
+        "Publisher",
+        "Year",
+        "Status",
+      ];
+
+      const rows = rawBooks.map((item) => {
+        const meta = Array.isArray(item.Book_Metadata)
+          ? item.Book_Metadata[0]
+          : item.Book_Metadata;
+
+        return [
+          escapeCsv(item.accession_number),
+          escapeCsv(meta?.title),
+          escapeCsv(meta?.author),
+          escapeCsv(item.isbn || meta?.isbn),
+          escapeCsv(meta?.category),
+          escapeCsv(item.call_number),
+          escapeCsv(meta?.publisher),
+          escapeCsv(
+            meta?.published_year ||
+              (meta as Record<string, unknown> | null)?.publication_year
+          ),
+          escapeCsv(item.status),
+        ].join(",");
+      });
+
+      const csvContent = [headers.join(","), ...rows].join("\r\n");
+
+      // Prepend UTF-8 BOM so Excel and other tools properly display special characters
+      const blob = new Blob(["\uFEFF" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "WSI_Library_Catalog.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      console.error("Export catalog CSV error:", err);
+      const msg =
+        err instanceof Error ? err.message : "Failed to export catalog.";
+      alert(msg);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Handle Metadata Update
@@ -435,8 +515,30 @@ export default function InventoryPage() {
           </p>
         </div>
 
-        {/* Batch Print Barcodes Button */}
-        <div>
+        {/* Header Action Buttons: Export Catalog (CSV) & Batch Print Barcodes */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Export Catalog (CSV) Button */}
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            disabled={isExporting}
+            className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-md shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Download complete catalog report of all physical copies in CSV format"
+          >
+            {isExporting ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>Exporting...</span>
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-4 w-4" />
+                <span>Export Catalog (CSV)</span>
+              </>
+            )}
+          </button>
+
+          {/* Batch Print Barcodes Button */}
           <button
             type="button"
             onClick={handleBatchPrint}

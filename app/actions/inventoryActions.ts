@@ -415,3 +415,30 @@ export async function deleteBook(
     return { success: false, error: msg };
   }
 }
+
+/**
+ * Queries the Physical_Books table and joins all related data from Book_Metadata.
+ * Returns the raw array of all physical books for catalog reporting and CSV export.
+ */
+export async function getAllBooksForExport() {
+  try {
+    const { data, error } = await supabase
+      .from("Physical_Books")
+      .select("*, Book_Metadata(*)")
+      .order("accession_number", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching books for export:", error.message);
+      throw new Error(`Failed to fetch books for export: ${error.message}`);
+    }
+
+    return data || [];
+  } catch (err: unknown) {
+    console.error("Unexpected error in getAllBooksForExport:", err);
+    const msg =
+      err instanceof Error
+        ? err.message
+        : "An unexpected error occurred while fetching books for export.";
+    throw new Error(msg);
+  }
+}
