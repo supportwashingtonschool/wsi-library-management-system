@@ -571,14 +571,14 @@ export default function StudentsPage() {
             </div>
 
             {/* Table (Address column removed) */}
-            <div className="overflow-x-auto max-h-[calc(100vh-16rem)] overflow-y-auto rounded-md border border-gray-200">
-              <table className="w-full text-left text-sm text-slate-700">
-                <thead className="sticky top-0 bg-gray-50 z-10 shadow-sm border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <div className="overflow-x-auto max-h-[calc(100vh-21rem)] min-h-[380px] overflow-y-auto rounded-md border border-gray-200">
+              <table className="w-full text-left text-sm text-slate-700 border-separate border-spacing-0">
+                <thead className="sticky top-0 z-10 shadow-xs border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   <tr>
-                    <th className="px-4 py-3">Library ID</th>
-                    <th className="px-4 py-3">Full Name</th>
-                    <th className="px-4 py-3">Grade / Section</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                    <th className="px-4 py-3 bg-gray-50 border-b border-slate-200">Library ID</th>
+                    <th className="px-4 py-3 bg-gray-50 border-b border-slate-200">Full Name</th>
+                    <th className="px-4 py-3 bg-gray-50 border-b border-slate-200">Grade / Section</th>
+                    <th className="px-4 py-3 bg-gray-50 border-b border-slate-200 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
