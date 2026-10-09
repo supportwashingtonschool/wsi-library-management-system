@@ -19,16 +19,13 @@ export default function StudentIdCard({ student }: StudentIdCardProps) {
       {/* ================= FRONT SIDE ================= */}
       <div className="w-[3.375in] h-[2.125in] bg-white border border-slate-300 rounded-lg overflow-hidden relative flex flex-col justify-between shrink-0 box-border shadow-xs print:shadow-none print:border-slate-400">
         {/* Top Header Banner */}
-        <div className="bg-[#7A2828] text-white px-2 py-1 flex items-center gap-1.5 shadow-xs shrink-0">
-          <div className="relative w-6 h-6 rounded-full bg-white p-0.5 shrink-0 overflow-hidden shadow-xs">
-            <Image
-              src="/logo.png"
-              alt="WSI Logo"
-              width={24}
-              height={24}
-              className="w-full h-full object-contain"
-            />
-          </div>
+        <div className="bg-[#7A2828] text-white px-2 py-1 flex items-center gap-3 shadow-xs shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/wsi-logo.png"
+            alt="WSI Logo"
+            className="w-10 h-10 object-contain rounded-full bg-white p-0.5 shrink-0"
+          />
           <div className="flex-1 leading-tight text-center pr-2">
             <h3 className="text-[8.5px] font-black tracking-wider uppercase text-white font-sans">
               WSI LEARNING RESOURCE CENTER
