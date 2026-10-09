@@ -386,8 +386,8 @@ export default function StudentsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Registration Form */}
-        <div className="lg:col-span-1">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 sticky top-6">
+        <div className="lg:col-span-1 self-start sticky top-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
             <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3">
               <UserPlus className="h-5 w-5 text-blue-600" />
               <span>Enroll New Student</span>
@@ -571,9 +571,9 @@ export default function StudentsPage() {
             </div>
 
             {/* Table (Address column removed) */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[calc(100vh-16rem)] overflow-y-auto rounded-md border border-gray-200">
               <table className="w-full text-left text-sm text-slate-700">
-                <thead className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <thead className="sticky top-0 bg-gray-50 z-10 shadow-sm border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3">Library ID</th>
                     <th className="px-4 py-3">Full Name</th>
