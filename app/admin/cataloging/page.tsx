@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import {
@@ -14,12 +14,18 @@ import {
   PlusCircle,
   Library,
   Sparkles,
+  FileSpreadsheet,
+  Upload,
 } from "lucide-react";
 import {
   fetchBookFromGoogle,
   saveBook,
   type BookMetadata,
 } from "@/app/actions/bookActions";
+import {
+  bulkImportBooks,
+  type BulkImportResult,
+} from "@/app/actions/importActions";
 
 // Dynamically import react-barcode to avoid SSR canvas/window mismatches
 const Barcode = dynamic(() => import("react-barcode"), { ssr: false });
@@ -53,6 +59,47 @@ export default function CatalogingPage() {
     callNumber: string;
     isbn: string;
   } | null>(null);
+
+  // Section 5: Bulk Excel Import State
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<BulkImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle Bulk Excel Import
+  const handleBulkImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!importFile) {
+      setImportError("Please choose an Excel (.xlsx) file first.");
+      return;
+    }
+
+    setIsImporting(true);
+    setImportError(null);
+    setImportSuccess(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", importFile);
+
+      const result = await bulkImportBooks(formData);
+      setIsImporting(false);
+
+      if (!result.success) {
+        setImportError(result.error || "Failed to import books from Excel file.");
+      } else {
+        setImportSuccess(result);
+        setImportFile(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    } catch (err: unknown) {
+      setIsImporting(false);
+      setImportError(err instanceof Error ? err.message : "An unexpected error occurred during import.");
+    }
+  };
 
   // Smart Feature: Auto-fill fields and calculate Call Number if Category contains "Fiction"
   useEffect(() => {
@@ -647,6 +694,158 @@ export default function CatalogingPage() {
               )}
             </div>
           </form>
+
+          {/* SECTION 4: Bulk Import Legacy Catalog Card */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
+                  <span>Bulk Import Legacy Catalog</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Import books in bulk from an Excel spreadsheet (.xlsx). Automatically processes all worksheets, allocates sequential accession IDs, and generates custom pseudo-ISBNs for unlisted items.
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit">
+                .xlsx Multi-Sheet
+              </span>
+            </div>
+
+            {/* Column Guide & Formatting Tips */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
+              <p className="font-semibold text-slate-700">Supported Excel Columns (Row 1 headers):</p>
+              <div className="flex flex-wrap gap-1.5">
+                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] font-bold text-slate-900 shadow-2xs">
+                  Title <span className="text-rose-500">*</span>
+                </span>
+                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                  Author
+                </span>
+                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                  ISBN
+                </span>
+                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                  Category
+                </span>
+                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                  Call Number
+                </span>
+                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                  Publisher
+                </span>
+                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                  Year
+                </span>
+              </div>
+              <ul className="text-[11px] text-slate-500 list-disc list-inside space-y-0.5 pt-0.5">
+                <li>Rows with missing titles will be skipped automatically.</li>
+                <li>Rows without an ISBN will be assigned a custom tracking pseudo-ISBN (<code className="font-mono text-slate-700">WSI-CUSTOM-...</code>).</li>
+                <li>Accession numbers are auto-incremented from the highest existing record in the library.</li>
+              </ul>
+            </div>
+
+            {/* File Selection & Action */}
+            <form onSubmit={handleBulkImport} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Choose Excel Workbook (.xlsx)
+                </label>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null;
+                      setImportFile(file);
+                      setImportError(null);
+                      setImportSuccess(null);
+                    }}
+                    disabled={isImporting}
+                    className="flex-1 text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer border border-slate-300 rounded-lg p-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={!importFile || isImporting}
+                    className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 shadow-sm cursor-pointer whitespace-nowrap"
+                  >
+                    {isImporting ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Importing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4" />
+                        <span>Run Bulk Import</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {importFile && !isImporting && (
+                  <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1.5">
+                    <span className="font-medium text-slate-700">{importFile.name}</span>
+                    <span>({(importFile.size / 1024).toFixed(1)} KB) ready for processing</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Loading State Banner */}
+              {isImporting && (
+                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 animate-pulse">
+                  <RefreshCw className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold">
+                      Importing books, please wait... this may take a minute
+                    </p>
+                    <p className="text-[11px] text-blue-700 mt-0.5">
+                      Extracting worksheets, allocating accession numbers, and uploading records to Supabase.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Error Banner */}
+              {importError && (
+                <div className="flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs">
+                  <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <span className="font-semibold">Import Error: </span>
+                    <span>{importError}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Success Banner */}
+              {importSuccess && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                    <span className="text-sm font-bold">
+                      Bulk Import Completed Successfully!
+                    </span>
+                  </div>
+                  <div className="text-xs text-emerald-800 pl-7 space-y-1">
+                    <p>
+                      Successfully imported and accessioned{" "}
+                      <strong>{importSuccess.count} physical book copies</strong> across{" "}
+                      <strong>{importSuccess.metadataCount} distinct titles</strong>.
+                    </p>
+                    {importSuccess.startAccession && importSuccess.endAccession && (
+                      <p className="text-[11px] font-mono text-emerald-700">
+                        Allocated Accession Range:{" "}
+                        <span className="font-bold">{importSuccess.startAccession}</span> to{" "}
+                        <span className="font-bold">{importSuccess.endAccession}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </form>
+          </div>
         </div>
       )}
     </div>
