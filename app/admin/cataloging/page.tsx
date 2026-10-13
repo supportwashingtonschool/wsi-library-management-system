@@ -14,8 +14,9 @@ import {
   PlusCircle,
   Library,
   Sparkles,
-  FileSpreadsheet,
-  Upload,
+  AlertTriangle,
+  Check,
+  ShieldCheck,
 } from "lucide-react";
 import {
   fetchBookFromGoogle,
@@ -23,8 +24,10 @@ import {
   type BookMetadata,
 } from "@/app/actions/bookActions";
 import {
-  bulkImportBooks,
-  type BulkImportResult,
+  parseExcelFile,
+  confirmBulkImport,
+  type ParsedBookRow,
+  type ConfirmImportResult,
 } from "@/app/actions/importActions";
 
 // Dynamically import react-barcode to avoid SSR canvas/window mismatches
@@ -60,44 +63,138 @@ export default function CatalogingPage() {
     isbn: string;
   } | null>(null);
 
-  // Section 5: Bulk Excel Import State
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importSuccess, setImportSuccess] = useState<BulkImportResult | null>(null);
+  // Section 5: Safe Bulk Excel Import State
+  const [isParsing, setIsParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [parsedBooks, setParsedBooks] = useState<ParsedBookRow[] | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [confirmSuccess, setConfirmSuccess] = useState<ConfirmImportResult | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle Bulk Excel Import
-  const handleBulkImport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!importFile) {
-      setImportError("Please choose an Excel (.xlsx) file first.");
-      return;
-    }
+  // Handle parsing the uploaded Excel file (previews data before DB insert)
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    setIsImporting(true);
-    setImportError(null);
-    setImportSuccess(null);
+    setUploadedFileName(file.name);
+    setIsParsing(true);
+    setParseError(null);
+    setConfirmError(null);
+    setConfirmSuccess(null);
+    setParsedBooks(null);
 
     try {
       const formData = new FormData();
-      formData.append("file", importFile);
+      formData.append("file", file);
 
-      const result = await bulkImportBooks(formData);
-      setIsImporting(false);
+      const result = await parseExcelFile(formData);
+      setIsParsing(false);
+
+      if (!result.success || !result.books) {
+        setParseError(result.error || "Failed to parse the Excel file.");
+      } else {
+        setParsedBooks(result.books);
+        // Default checkboxes: checked if NOT a duplicate
+        const initialSelected = new Set<string>();
+        result.books.forEach((b) => {
+          if (!b.isDuplicate) {
+            initialSelected.add(b.id);
+          }
+        });
+        setSelectedRowIds(initialSelected);
+      }
+    } catch (err: unknown) {
+      setIsParsing(false);
+      setParseError(err instanceof Error ? err.message : "An unexpected error occurred while parsing.");
+    }
+  };
+
+  // Toggle single row selection
+  const handleToggleRow = (id: string) => {
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Select / Deselect all rows
+  const handleSelectAll = (checked: boolean) => {
+    if (!parsedBooks) return;
+    if (checked) {
+      setSelectedRowIds(new Set(parsedBooks.map((b) => b.id)));
+    } else {
+      setSelectedRowIds(new Set());
+    }
+  };
+
+  // Select only new books (skip duplicates)
+  const handleSelectNewOnly = () => {
+    if (!parsedBooks) return;
+    setSelectedRowIds(new Set(parsedBooks.filter((b) => !b.isDuplicate).map((b) => b.id)));
+  };
+
+  // Confirm & Import Selected Books into Database
+  const handleConfirmImport = async () => {
+    if (!parsedBooks) return;
+    const selectedBooks = parsedBooks.filter((b) => selectedRowIds.has(b.id));
+
+    if (selectedBooks.length === 0) {
+      setConfirmError("No books are selected. Please check at least one book to import.");
+      return;
+    }
+
+    setIsConfirming(true);
+    setConfirmError(null);
+    setConfirmSuccess(null);
+
+    try {
+      const payload = selectedBooks.map((b) => ({
+        title: b.title,
+        author: b.author,
+        publisher: b.publisher,
+        category: b.category,
+        isbn: b.isbn,
+        call_number: b.call_number,
+        published_year: b.published_year,
+      }));
+
+      const result = await confirmBulkImport(payload);
+      setIsConfirming(false);
 
       if (!result.success) {
-        setImportError(result.error || "Failed to import books from Excel file.");
+        setConfirmError(result.error || "Failed to import books into the database.");
       } else {
-        setImportSuccess(result);
-        setImportFile(null);
+        setConfirmSuccess(result);
+        setParsedBooks(null);
+        setSelectedRowIds(new Set());
+        setUploadedFileName("");
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
       }
     } catch (err: unknown) {
-      setIsImporting(false);
-      setImportError(err instanceof Error ? err.message : "An unexpected error occurred during import.");
+      setIsConfirming(false);
+      setConfirmError(err instanceof Error ? err.message : "An unexpected error occurred during import.");
+    }
+  };
+
+  // Cancel / Reset the preview
+  const handleCancelPreview = () => {
+    setParsedBooks(null);
+    setSelectedRowIds(new Set());
+    setParseError(null);
+    setConfirmError(null);
+    setUploadedFileName("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
@@ -695,156 +792,341 @@ export default function CatalogingPage() {
             </div>
           </form>
 
-          {/* SECTION 4: Bulk Import Legacy Catalog Card */}
+          {/* SECTION 4: Safe Bulk Import Legacy Catalog Card */}
           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                  <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
-                  <span>Bulk Import Legacy Catalog</span>
+                  <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                  <span>Safe Bulk Import from Excel</span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Import books in bulk from an Excel spreadsheet (.xlsx). Automatically processes all worksheets, allocates sequential accession IDs, and generates custom pseudo-ISBNs for unlisted items.
+                  Preview spreadsheet records and detect duplicates against your database before saving.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 w-fit">
-                .xlsx Multi-Sheet
+                Pre-import Verification
               </span>
             </div>
 
-            {/* Column Guide & Formatting Tips */}
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
-              <p className="font-semibold text-slate-700">Supported Excel Columns (Row 1 headers):</p>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] font-bold text-slate-900 shadow-2xs">
-                  Title <span className="text-rose-500">*</span>
-                </span>
-                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                  Author
-                </span>
-                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                  ISBN
-                </span>
-                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                  Category
-                </span>
-                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                  Call Number
-                </span>
-                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                  Publisher
-                </span>
-                <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                  Year
-                </span>
-              </div>
-              <ul className="text-[11px] text-slate-500 list-disc list-inside space-y-0.5 pt-0.5">
-                <li>Rows with missing titles will be skipped automatically.</li>
-                <li>Rows without an ISBN will be assigned a custom tracking pseudo-ISBN (<code className="font-mono text-slate-700">WSI-CUSTOM-...</code>).</li>
-                <li>Accession numbers are auto-incremented from the highest existing record in the library.</li>
-              </ul>
-            </div>
-
-            {/* File Selection & Action */}
-            <form onSubmit={handleBulkImport} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                  Choose Excel Workbook (.xlsx)
-                </label>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null;
-                      setImportFile(file);
-                      setImportError(null);
-                      setImportSuccess(null);
-                    }}
-                    disabled={isImporting}
-                    className="flex-1 text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer border border-slate-300 rounded-lg p-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={!importFile || isImporting}
-                    className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 shadow-sm cursor-pointer whitespace-nowrap"
-                  >
-                    {isImporting ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>Importing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4" />
-                        <span>Run Bulk Import</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {importFile && !isImporting && (
-                  <p className="text-[11px] text-slate-500 mt-1.5 flex items-center gap-1.5">
-                    <span className="font-medium text-slate-700">{importFile.name}</span>
-                    <span>({(importFile.size / 1024).toFixed(1)} KB) ready for processing</span>
-                  </p>
-                )}
-              </div>
-
-              {/* Loading State Banner */}
-              {isImporting && (
-                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 animate-pulse">
-                  <RefreshCw className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
-                  <div>
-                    <p className="text-xs font-semibold">
-                      Importing books, please wait... this may take a minute
-                    </p>
-                    <p className="text-[11px] text-blue-700 mt-0.5">
-                      Extracting worksheets, allocating accession numbers, and uploading records to Supabase.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Error Banner */}
-              {importError && (
-                <div className="flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs">
-                  <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <span className="font-semibold">Import Error: </span>
-                    <span>{importError}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Success Banner */}
-              {importSuccess && (
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-                    <span className="text-sm font-bold">
-                      Bulk Import Completed Successfully!
+            {/* Step 1: File Upload (when no preview is active) */}
+            {!parsedBooks && (
+              <div className="space-y-4">
+                {/* Column Guide & Formatting Tips */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
+                  <p className="font-semibold text-slate-700">Supported Excel Columns (Row 1 headers of Sheet 1):</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] font-bold text-slate-900 shadow-2xs">
+                      Title <span className="text-rose-500">*</span>
+                    </span>
+                    <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                      Author
+                    </span>
+                    <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                      Publisher
+                    </span>
+                    <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                      Category
+                    </span>
+                    <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                      ISBN
                     </span>
                   </div>
-                  <div className="text-xs text-emerald-800 pl-7 space-y-1">
-                    <p>
-                      Successfully imported and accessioned{" "}
-                      <strong>{importSuccess.count} physical book copies</strong> across{" "}
-                      <strong>{importSuccess.metadataCount} distinct titles</strong>.
-                    </p>
-                    {importSuccess.startAccession && importSuccess.endAccession && (
-                      <p className="text-[11px] font-mono text-emerald-700">
-                        Allocated Accession Range:{" "}
-                        <span className="font-bold">{importSuccess.startAccession}</span> to{" "}
-                        <span className="font-bold">{importSuccess.endAccession}</span>
-                      </p>
-                    )}
+                  <ul className="text-[11px] text-slate-500 list-disc list-inside space-y-0.5 pt-0.5">
+                    <li>Missing titles will be skipped automatically.</li>
+                    <li>Items without an ISBN will be assigned an automated pseudo-ISBN (<code className="font-mono text-slate-700">WSI-CUSTOM-...</code>).</li>
+                    <li>Titles and ISBNs matching existing library records will be flagged as duplicates.</li>
+                  </ul>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Select Excel File (.xlsx) to Preview
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      onChange={handleFileChange}
+                      disabled={isParsing}
+                      className="flex-1 text-xs text-slate-600 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer border border-slate-300 rounded-lg p-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                    />
                   </div>
                 </div>
-              )}
-            </form>
+
+                {/* Parsing Spinner */}
+                {isParsing && (
+                  <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 animate-pulse">
+                    <RefreshCw className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold">
+                        Parsing Excel sheet and checking library catalog for duplicates...
+                      </p>
+                      <p className="text-[11px] text-blue-700 mt-0.5">
+                        Please wait a moment while we scan your records.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Parse Error Banner */}
+                {parseError && (
+                  <div className="flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs">
+                    <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-semibold">Parse Error: </span>
+                      <span>{parseError}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirm Success Banner */}
+                {confirmSuccess && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                      <span className="text-sm font-bold">
+                        Import Completed Successfully!
+                      </span>
+                    </div>
+                    <div className="text-xs text-emerald-800 pl-7 space-y-1">
+                      <p>
+                        Successfully inserted <strong>{confirmSuccess.count} physical copies</strong> into the library catalog.
+                      </p>
+                      {confirmSuccess.startAccession && confirmSuccess.endAccession && (
+                        <p className="text-[11px] font-mono text-emerald-700">
+                          Allocated Accession Range: <span className="font-bold">{confirmSuccess.startAccession}</span> to <span className="font-bold">{confirmSuccess.endAccession}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Interactive Preview Table (when books have been parsed) */}
+            {parsedBooks && (
+              <div className="space-y-4">
+                {/* Stats & Batch Controls Bar */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-medium text-slate-700">
+                      File: <strong>{uploadedFileName || "Spreadsheet"}</strong>
+                    </span>
+                    <span className="text-slate-300">•</span>
+                    <span className="px-2 py-0.5 bg-white border border-slate-200 rounded text-slate-800 font-semibold">
+                      Total: {parsedBooks.length}
+                    </span>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded font-semibold">
+                      New: {parsedBooks.filter((b) => !b.isDuplicate).length}
+                    </span>
+                    {parsedBooks.some((b) => b.isDuplicate) && (
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 rounded font-semibold flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 text-amber-600" />
+                        Duplicates: {parsedBooks.filter((b) => b.isDuplicate).length}
+                      </span>
+                    )}
+                    <span className="px-2.5 py-0.5 bg-blue-100 text-blue-900 border border-blue-200 rounded font-bold">
+                      Selected: {selectedRowIds.size}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={handleSelectNewOnly}
+                      className="px-2.5 py-1 text-slate-700 hover:text-emerald-700 bg-white hover:bg-emerald-50 border border-slate-200 rounded-md font-medium transition cursor-pointer"
+                    >
+                      Select New Only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAll(true)}
+                      className="px-2.5 py-1 text-slate-700 hover:text-blue-700 bg-white hover:bg-blue-50 border border-slate-200 rounded-md font-medium transition cursor-pointer"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAll(false)}
+                      className="px-2.5 py-1 text-slate-700 hover:text-rose-700 bg-white hover:bg-rose-50 border border-slate-200 rounded-md font-medium transition cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCancelPreview}
+                      disabled={isConfirming}
+                      className="px-2.5 py-1 text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-md font-medium transition cursor-pointer"
+                      title="Cancel preview and upload a different file"
+                    >
+                      Change File
+                    </button>
+                  </div>
+                </div>
+
+                {/* Preview Table */}
+                <div className="max-h-[460px] overflow-y-auto overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
+                  <table className="w-full text-left text-xs text-slate-700 border-separate border-spacing-0">
+                    <thead className="sticky top-0 z-10 shadow-xs border-b border-slate-200 text-slate-600 uppercase tracking-wider font-semibold text-[11px]">
+                      <tr>
+                        <th className="px-3.5 py-3 bg-slate-100 border-b border-slate-200 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              parsedBooks.length > 0 &&
+                              selectedRowIds.size === parsedBooks.length
+                            }
+                            onChange={(e) => handleSelectAll(e.target.checked)}
+                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer h-3.5 w-3.5"
+                            title="Select / Deselect all rows"
+                          />
+                        </th>
+                        <th className="px-3 py-3 bg-slate-100 border-b border-slate-200 w-28">Status</th>
+                        <th className="px-3 py-3 bg-slate-100 border-b border-slate-200">Title</th>
+                        <th className="px-3 py-3 bg-slate-100 border-b border-slate-200">Author</th>
+                        <th className="px-3 py-3 bg-slate-100 border-b border-slate-200">ISBN</th>
+                        <th className="px-3 py-3 bg-slate-100 border-b border-slate-200">Category</th>
+                        <th className="px-3 py-3 bg-slate-100 border-b border-slate-200">Publisher</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {parsedBooks.map((book) => {
+                        const isSelected = selectedRowIds.has(book.id);
+                        return (
+                          <tr
+                            key={book.id}
+                            className={`transition cursor-pointer ${
+                              book.isDuplicate
+                                ? "bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-amber-500"
+                                : isSelected
+                                ? "bg-blue-50/30 hover:bg-blue-50/60"
+                                : "hover:bg-slate-50"
+                            }`}
+                            onClick={() => handleToggleRow(book.id)}
+                          >
+                            <td
+                              className="px-3.5 py-2.5 text-center"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleToggleRow(book.id)}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer h-3.5 w-3.5"
+                              />
+                            </td>
+                            <td className="px-3 py-2.5 whitespace-nowrap">
+                              {book.isDuplicate ? (
+                                <div className="space-y-0.5">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+                                    <AlertTriangle className="h-3 w-3 text-amber-600" />
+                                    Duplicate
+                                  </span>
+                                  {book.duplicateReason && (
+                                    <p className="text-[10px] text-amber-700 font-medium truncate max-w-[140px]">
+                                      {book.duplicateReason}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                  <Check className="h-3 w-3 text-emerald-600" />
+                                  Ready
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 font-semibold text-slate-900 max-w-[240px]">
+                              <p className="truncate" title={book.title}>
+                                {book.title}
+                              </p>
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-600 max-w-[180px]">
+                              <p className="truncate" title={book.author}>
+                                {book.author || "—"}
+                              </p>
+                            </td>
+                            <td className="px-3 py-2.5 whitespace-nowrap font-mono text-[11px]">
+                              {book.isbn ? (
+                                <span className="text-slate-700">{book.isbn}</span>
+                              ) : (
+                                <span className="text-[10px] italic text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  Will auto-generate
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-600 max-w-[140px]">
+                              <p className="truncate" title={book.category}>
+                                {book.category || "—"}
+                              </p>
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-600 max-w-[140px]">
+                              <p className="truncate" title={book.publisher}>
+                                {book.publisher || "—"}
+                              </p>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Confirm Error Banner */}
+                {confirmError && (
+                  <div className="flex items-start gap-2.5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs">
+                    <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <span className="font-semibold">Import Error: </span>
+                      <span>{confirmError}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Bottom Action Footer */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                  <div className="text-xs text-slate-600">
+                    <strong>{selectedRowIds.size}</strong> of {parsedBooks.length} book(s) selected for import.
+                    {selectedRowIds.size > 0 && (
+                      <span className="text-slate-400 ml-1">
+                        (Sequential accession numbers will be allocated automatically)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCancelPreview}
+                      disabled={isConfirming}
+                      className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition disabled:opacity-50 cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleConfirmImport}
+                      disabled={selectedRowIds.size === 0 || isConfirming}
+                      className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg text-xs font-semibold transition disabled:opacity-50 shadow-sm cursor-pointer whitespace-nowrap"
+                    >
+                      {isConfirming ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span>Importing {selectedRowIds.size} Book(s)...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>Confirm &amp; Import Selected ({selectedRowIds.size})</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
