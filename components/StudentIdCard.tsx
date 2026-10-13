@@ -111,15 +111,15 @@ export default function StudentIdCard({ student }: StudentIdCardProps) {
       />
 
       {/* ================= BACK SIDE ================= */}
-      <div className="w-[3.375in] h-[2.125in] bg-white border border-slate-300 rounded-lg p-2.5 flex flex-col justify-between shrink-0 box-border relative overflow-hidden shadow-xs print:shadow-none print:border-slate-400">
+      <div className="w-[3.375in] h-[2.125in] bg-white border border-slate-300 rounded-lg p-3 flex flex-col justify-between shrink-0 box-border relative overflow-hidden shadow-xs print:shadow-none print:border-slate-400">
         {/* Subtle Watermark */}
         <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none select-none text-[15px] font-black tracking-widest text-slate-900 rotate-[-12deg]">
           TERMS AND CONDITIONS
         </div>
 
-        {/* Terms & Conditions Bullet Points */}
-        <div className="relative z-10">
-          <ul className="space-y-1 text-[6.2px] text-slate-700 leading-[1.25] list-disc list-outside pl-3">
+        {/* Terms & Conditions Bullet Points (Vertically Centered) */}
+        <div className="relative z-10 flex-1 flex flex-col justify-center">
+          <ul className="space-y-1 text-[6.2px] text-slate-700 leading-[1.25] list-disc list-outside pl-3 px-2">
             <li>
               The <strong className="font-bold text-slate-900">WSILRC</strong> Card must be use in Library premises for borrowing books and other LRC Materials.
             </li>
