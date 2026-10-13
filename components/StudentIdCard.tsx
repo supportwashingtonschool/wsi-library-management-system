@@ -147,13 +147,19 @@ export default function StudentIdCard({ student }: StudentIdCardProps) {
             </span>
           </div>
 
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/principal-signature.png"
+              alt="Principal Signature"
+              className="absolute -top-7 w-16 h-9 object-contain z-10 pointer-events-none"
+            />
             <div className="w-20 border-b border-slate-400 mb-0.5" />
             <span className="text-[7.5px] font-bold text-slate-900 leading-tight">
-              Jeffrey P. Lalley
+              Jonathan Son P. Aceron
             </span>
             <span className="text-[6px] text-slate-500 font-medium">
-              School Head
+              School Principal
             </span>
           </div>
         </div>
