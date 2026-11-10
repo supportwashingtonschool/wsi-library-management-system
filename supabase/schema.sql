@@ -103,3 +103,49 @@ CREATE POLICY "Allow public insert on student-photos"
     ON storage.objects FOR INSERT
     WITH CHECK (bucket_id = 'student-photos');
 
+-- ==============================================================================
+-- 6. Newsletters Table & 'newsletters' Storage Bucket Configuration
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS "Newsletters" (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    issue_label TEXT NOT NULL,
+    description TEXT,
+    pdf_url TEXT NOT NULL,
+    cover_url TEXT,
+    page_count INTEGER NOT NULL DEFAULT 1,
+    is_featured BOOLEAN NOT NULL DEFAULT false,
+    published_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW()),
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
+);
+
+CREATE INDEX IF NOT EXISTS idx_newsletters_featured ON "Newsletters"(is_featured);
+CREATE INDEX IF NOT EXISTS idx_newsletters_published_at ON "Newsletters"(published_at DESC);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE "Newsletters" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public all access on Newsletters"
+    ON "Newsletters" FOR ALL USING (true) WITH CHECK (true);
+
+-- Create public storage bucket for newsletter PDFs and cover thumbnails
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('newsletters', 'newsletters', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Allow public read access to newsletters bucket
+CREATE POLICY "Allow public read on newsletters bucket"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'newsletters');
+
+-- Allow public insert to newsletters bucket
+CREATE POLICY "Allow public insert on newsletters bucket"
+    ON storage.objects FOR INSERT
+    WITH CHECK (bucket_id = 'newsletters');
+
+-- Allow public delete on newsletters bucket
+CREATE POLICY "Allow public delete on newsletters bucket"
+    ON storage.objects FOR DELETE
+    USING (bucket_id = 'newsletters');
+
+
