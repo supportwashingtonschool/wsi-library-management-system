@@ -22,8 +22,7 @@
     "qrcode.react": "^4.2.0",
     "react": "^18",
     "react-barcode": "^1.6.1",
-    "react-dom": "^18",
-    "wsi-library-management-system": "file:../../worktrees/WSI-library-management-system/newsletters_flipping_book_display"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",
