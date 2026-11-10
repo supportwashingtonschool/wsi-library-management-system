@@ -14,13 +14,18 @@ import {
   Calendar,
   Layers,
   GraduationCap,
+  Newspaper,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { searchCatalog, type CatalogBook } from "@/app/actions/publicActions";
+import { getFeaturedNewsletter, type Newsletter } from "@/app/actions/newsletterActions";
 
 export default function PublicCatalogPage() {
   const [query, setQuery] = useState("");
   const [books, setBooks] = useState<CatalogBook[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [featuredNewsletter, setFeaturedNewsletter] = useState<Newsletter | null>(null);
 
   // Perform search
   const handleSearch = useCallback(
@@ -33,9 +38,12 @@ export default function PublicCatalogPage() {
     [query]
   );
 
-  // Load initial 10 most recent books on mount
+  // Load initial 10 most recent books and featured newsletter on mount
   useEffect(() => {
     handleSearch("");
+    getFeaturedNewsletter().then((feat) => {
+      if (feat) setFeaturedNewsletter(feat);
+    });
   }, [handleSearch]);
 
   const onSubmit = (e: React.FormEvent) => {
@@ -75,6 +83,14 @@ export default function PublicCatalogPage() {
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              href="/newsletters"
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition border border-blue-200 shadow-sm"
+            >
+              <Newspaper className="h-4 w-4 text-blue-600" />
+              <span>Newsletters</span>
+            </Link>
+
             <Link
               href="/student"
               className="flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition border border-blue-200 shadow-sm"
@@ -174,7 +190,84 @@ export default function PublicCatalogPage() {
       </section>
 
       {/* Catalog Results Grid */}
-      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full space-y-6">
+      <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full space-y-8">
+        {/* Latest School Newsletter Spotlight Card */}
+        {featuredNewsletter && !query.trim() && (
+          <section className="bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 border border-blue-800/80 rounded-2xl p-6 sm:p-7 text-white shadow-lg relative overflow-hidden">
+            {/* Background decorative glow */}
+            <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col md:flex-row items-center gap-6 sm:gap-8">
+              {/* Cover Preview (with 3D perspective shadow) */}
+              <Link
+                href={`/newsletters?issue=${featuredNewsletter.id}`}
+                className="group relative w-36 h-48 sm:w-44 sm:h-60 rounded-xl overflow-hidden shadow-2xl shrink-0 border border-white/20 bg-slate-950 hover:scale-105 transition duration-300"
+              >
+                {featuredNewsletter.cover_url ? (
+                  <Image
+                    src={featuredNewsletter.cover_url}
+                    alt={featuredNewsletter.title}
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center text-slate-400">
+                    <Newspaper className="h-10 w-10 text-slate-600 mb-2" />
+                    <span className="text-xs font-bold text-slate-200 line-clamp-2">
+                      {featuredNewsletter.title}
+                    </span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition flex items-end p-3">
+                  <span className="text-[11px] font-bold text-white flex items-center gap-1">
+                    <BookOpen className="h-3.5 w-3.5 text-blue-400" />
+                    Read Flipbook
+                  </span>
+                </div>
+              </Link>
+
+              {/* Newsletter Details */}
+              <div className="flex-1 space-y-3 text-center md:text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-xs font-semibold">
+                  <Sparkles className="h-3.5 w-3.5 text-blue-400" />
+                  <span>Featured School Newsletter</span>
+                  <span className="text-white/40">•</span>
+                  <span className="text-white">{featuredNewsletter.issue_label}</span>
+                </div>
+
+                <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+                  {featuredNewsletter.title}
+                </h3>
+
+                {featuredNewsletter.description && (
+                  <p className="text-xs sm:text-sm text-slate-300 line-clamp-3 max-w-2xl">
+                    {featuredNewsletter.description}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
+                  <Link
+                    href={`/newsletters?issue=${featuredNewsletter.id}`}
+                    className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-white bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-xl transition shadow-md group"
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    <span>Read 2-Page Flipbook</span>
+                    <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition" />
+                  </Link>
+
+                  <Link
+                    href="/newsletters"
+                    className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-300 hover:text-white bg-white/10 hover:bg-white/15 border border-white/15 px-4 py-2.5 rounded-xl transition"
+                  >
+                    <span>Browse All Issues</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-4">
           <div>
             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">

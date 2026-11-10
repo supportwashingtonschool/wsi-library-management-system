@@ -18,10 +18,12 @@
     "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.47.0",
     "next": "14.2.35",
+    "pdfjs-dist": "^3.11.174",
     "qrcode.react": "^4.2.0",
     "react": "^18",
     "react-barcode": "^1.6.1",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "wsi-library-management-system": "file:../../worktrees/WSI-library-management-system/newsletters_flipping_book_display"
   },
   "devDependencies": {
     "@types/node": "^20",

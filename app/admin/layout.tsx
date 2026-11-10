@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { BookPlus, Repeat, LayoutDashboard, ArrowLeft, Users, LogOut, Database } from "lucide-react";
+import { BookPlus, Repeat, LayoutDashboard, ArrowLeft, Users, LogOut, Database, Newspaper } from "lucide-react";
 import { logout } from "@/app/actions/authActions";
 
 export default function AdminLayout({
@@ -67,6 +67,13 @@ export default function AdminLayout({
           >
             <Users className="h-4 w-4" />
             Students
+          </Link>
+          <Link
+            href="/admin/newsletters"
+            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 text-slate-300 hover:text-white transition"
+          >
+            <Newspaper className="h-4 w-4" />
+            Newsletters
           </Link>
         </nav>
 
