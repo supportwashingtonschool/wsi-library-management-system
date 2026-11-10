@@ -169,11 +169,17 @@ export async function updateMetadata(
       return { success: false, error: "Author cannot be empty." };
     }
 
+    let cleanYear = updatedData.published_year?.trim() || null;
+    if (cleanYear && cleanYear.length > 20) {
+      const match = cleanYear.match(/\b\d{4}\b/);
+      cleanYear = match ? match[0] : cleanYear.slice(0, 20);
+    }
+
     const payload = {
       title,
       author,
       publisher: updatedData.publisher?.trim() || null,
-      published_year: updatedData.published_year?.trim() || null,
+      published_year: cleanYear,
       category: updatedData.category?.trim() || null,
       cover_url: updatedData.cover_url?.trim() || null,
     };

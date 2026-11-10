@@ -403,13 +403,14 @@ export async function parseExcelFile(formData: FormData): Promise<ParseExcelResu
         yearCol !== -1 ? getCellValueAsString(row.getCell(yearCol).value).trim() : "";
       if (rawYear) {
         const match = rawYear.match(/\b\d{4}\b/);
-        if (match) rawYear = match[0];
+        rawYear = match ? match[0] : rawYear.slice(0, 20);
       }
 
-      const rawIsbn =
-        isbnCol !== -1
-          ? getCellValueAsString(row.getCell(isbnCol).value).replace(/[-\s]/g, "").trim()
-          : "";
+      let rawIsbn = "";
+      if (isbnCol !== -1) {
+        const cellVal = getCellValueAsString(row.getCell(isbnCol).value);
+        rawIsbn = cellVal.split(/[/,;]/)[0].replace(/[-\s]/g, "").trim().slice(0, 20);
+      }
 
       // 1. Merged Banner Hazard Filter:
       // If 2 or more other mapped columns have the exact same string as rawTitle
@@ -513,7 +514,7 @@ export async function parseExcelFile(formData: FormData): Promise<ParseExcelResu
 /**
  * 2. Bulk Import Confirmation Action (with Zero-Mutation Dry-Run Mode):
  * - Live Mode (dryRun = false):
- *   Assigns sequential WSI-XXXX accession numbers, generates fallback WSI-CUSTOM-... ISBNs,
+ *   Assigns sequential WSI-XXXX accession numbers, generates fallback WSI-C-... ISBNs,
  *   and inserts/upserts into Supabase Book_Metadata and Physical_Books.
  * - Dry-Run Mode (dryRun = true):
  *   Queries Physical_Books for real next sequential accession number, generates payloads,
@@ -557,6 +558,7 @@ export async function confirmBulkImport(
 
     let currentSeq = maxNumber;
     const timestamp = Date.now();
+    const timeBase36 = timestamp.toString(36).toUpperCase();
 
     // 2. Prepare metadata and physical books arrays
     // Deduplicate metadata by ISBN to avoid Postgres ON CONFLICT batch conflicts
@@ -571,20 +573,40 @@ export async function confirmBulkImport(
     const simulatedPhysicalBooks: SimulatedPhysicalBookRow[] = [];
 
     booksArray.forEach((book, idx) => {
-      let finalIsbn = book.isbn ? book.isbn.replace(/[-\s]/g, "").trim() : "";
-      if (!finalIsbn) {
-        finalIsbn = `WSI-CUSTOM-${timestamp}-${idx + 1}`;
+      // Clean and sanitize ISBN: remove spaces, dashes, slashes, and take first ISBN if comma/semicolon/slash separated
+      let finalIsbn = "";
+      if (book.isbn) {
+        const cleaned = book.isbn.split(/[/,;]/)[0].replace(/[-\s]/g, "").trim();
+        finalIsbn = cleaned.slice(0, 20);
       }
 
+      // If no valid ISBN or cleaned was empty, generate a unique pseudo-ISBN that strictly fits in Postgres VARCHAR(20)
+      if (!finalIsbn) {
+        const seqStr = String(idx + 1).padStart(4, "0");
+        // "WSI-C-" (6) + timeBase36 (8) + "-" (1) + seqStr (4) = 19 characters total (<= 20)
+        finalIsbn = `WSI-C-${timeBase36}-${seqStr}`.slice(0, 20);
+      }
+
+      let cleanPublishedYear = book.published_year?.trim() || null;
+      if (cleanPublishedYear && cleanPublishedYear.length > 20) {
+        const match = cleanPublishedYear.match(/\b\d{4}\b/);
+        cleanPublishedYear = match ? match[0] : cleanPublishedYear.slice(0, 20);
+      }
+
+      const cleanCallNumber = book.call_number?.trim()
+        ? book.call_number.trim().slice(0, 50)
+        : null;
+
       if (!metadataMap.has(finalIsbn)) {
+        const isCustomIsbn = finalIsbn.startsWith("WSI-") || !/^\d{9,13}[\dX]?$/i.test(finalIsbn);
         const metaPayload: SimulatedMetadataRow = {
           isbn: finalIsbn,
           title: book.title.trim(),
           author: book.author?.trim() || "Unknown Author",
           category: book.category?.trim() || null,
           publisher: book.publisher?.trim() || null,
-          published_year: book.published_year?.trim() || null,
-          cover_url: finalIsbn.startsWith("WSI-CUSTOM-")
+          published_year: cleanPublishedYear,
+          cover_url: isCustomIsbn
             ? null
             : `https://covers.openlibrary.org/b/isbn/${finalIsbn}-L.jpg`,
         };
@@ -598,7 +620,7 @@ export async function confirmBulkImport(
       physicalBooksToInsert.push({
         accession_number: accessionNumber,
         isbn: finalIsbn,
-        call_number: book.call_number?.trim() || null,
+        call_number: cleanCallNumber,
         status: "Available",
       });
 
@@ -606,7 +628,7 @@ export async function confirmBulkImport(
         accession_number: accessionNumber,
         isbn: finalIsbn,
         title: book.title.trim(),
-        call_number: book.call_number?.trim() || null,
+        call_number: cleanCallNumber,
         status: "Available",
       });
     });

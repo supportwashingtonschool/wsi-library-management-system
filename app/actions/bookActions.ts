@@ -222,12 +222,18 @@ export async function saveBook(
   copies: number = 1
 ): Promise<SaveBookResult> {
   try {
-    const cleanIsbn = bookData.isbn.replace(/[-\s]/g, "").trim();
+    const cleanIsbn = bookData.isbn.split(/[/,;]/)[0].replace(/[-\s]/g, "").trim().slice(0, 20);
     if (!cleanIsbn) {
       return { success: false, error: "ISBN is required." };
     }
     if (!bookData.title.trim()) {
       return { success: false, error: "Title is required." };
+    }
+
+    let cleanYear = bookData.published_year?.trim() || null;
+    if (cleanYear && cleanYear.length > 20) {
+      const match = cleanYear.match(/\b\d{4}\b/);
+      cleanYear = match ? match[0] : cleanYear.slice(0, 20);
     }
 
     // 1. Upsert metadata into Book_Metadata
@@ -238,7 +244,7 @@ export async function saveBook(
       cover_url: bookData.cover_url?.trim() || null,
       category: bookData.category?.trim() || null,
       publisher: bookData.publisher?.trim() || null,
-      published_year: bookData.published_year?.trim() || null,
+      published_year: cleanYear,
     };
 
     let { error: metaError } = await supabase

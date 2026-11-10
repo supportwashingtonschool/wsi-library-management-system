@@ -849,7 +849,7 @@ export default function CatalogingPage() {
                   </div>
                   <ul className="text-[11px] text-slate-500 list-disc list-inside space-y-0.5 pt-0.5">
                     <li>Multi-row banners, cover sheets, and merged section divider rows are automatically skipped.</li>
-                    <li>Items without an ISBN will be assigned an automated pseudo-ISBN (<code className="font-mono text-slate-700">WSI-CUSTOM-...</code>).</li>
+                    <li>Items without an ISBN will be assigned an automated pseudo-ISBN (<code className="font-mono text-slate-700">WSI-C-...</code>).</li>
                     <li>Titles and ISBNs matching existing library records will be flagged as duplicates.</li>
                   </ul>
                 </div>
