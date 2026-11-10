@@ -44,6 +44,8 @@ export default function StudentsPage() {
   const [isLoadingList, setIsLoadingList] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [printingStudent, setPrintingStudent] = useState<Student | null>(null);
+  const [studentsToPrint, setStudentsToPrint] = useState<Student[] | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Edit Modal State
@@ -293,16 +295,55 @@ export default function StudentsPage() {
         setLastRegistered(null);
         setSuccessMessage(null);
       }
+      setSelectedStudentIds((prev) => {
+        const next = new Set(prev);
+        next.delete(student.library_id);
+        return next;
+      });
       loadStudents();
     }
   };
 
-  // Trigger batch print of all enrolled students
+  // Toggle selection for a single student
+  const handleToggleSelect = (id: string) => {
+    setSelectedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Select / Deselect all visible filtered students
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedStudentIds(new Set(filteredStudents.map((s) => s.library_id)));
+    } else {
+      setSelectedStudentIds(new Set());
+    }
+  };
+
+  // Clear selection
+  const handleClearSelection = () => {
+    setSelectedStudentIds(new Set());
+  };
+
+  // Trigger batch print of selected (or all) enrolled students
   const handleBatchPrint = () => {
-    if (students.length === 0) {
-      alert("No students currently registered to print.");
+    const targets =
+      selectedStudentIds.size > 0
+        ? students.filter((s) => selectedStudentIds.has(s.library_id))
+        : (filteredStudents.length > 0 ? filteredStudents : students);
+
+    if (targets.length === 0) {
+      alert("No students selected or registered to print.");
       return;
     }
+
+    setStudentsToPrint(targets);
     setPrintingStudent(null);
     setTimeout(() => {
       window.print();
@@ -312,6 +353,7 @@ export default function StudentsPage() {
   // Trigger printing of a single student ID card
   const handlePrintSingle = (student: Student) => {
     setPrintingStudent(student);
+    setStudentsToPrint(null);
     setTimeout(() => {
       window.print();
     }, 150);
@@ -371,15 +413,33 @@ export default function StudentsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {selectedStudentIds.size > 0 && (
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl transition shadow-2xs cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5 text-slate-400" />
+              <span>Clear ({selectedStudentIds.size})</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={handleBatchPrint}
             disabled={students.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-[#7A2828] hover:bg-[#601F1F] rounded-xl shadow-sm transition disabled:opacity-50 cursor-pointer"
-            title="Batch print all student ID cards"
+            title={
+              selectedStudentIds.size > 0
+                ? `Batch print ${selectedStudentIds.size} selected student ID card(s)`
+                : "Batch print all student ID cards"
+            }
           >
             <Printer className="h-4 w-4" />
-            <span>Batch Print IDs ({students.length})</span>
+            <span>
+              {selectedStudentIds.size > 0
+                ? `Batch Print Selected IDs (${selectedStudentIds.size})`
+                : `Batch Print All IDs (${students.length})`}
+            </span>
           </button>
         </div>
       </div>
@@ -550,11 +610,16 @@ export default function StudentsPage() {
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <GraduationCap className="h-5 w-5 text-blue-600" />
                 <h2 className="text-base font-semibold text-slate-800">
                   Enrolled Students ({students.length})
                 </h2>
+                {selectedStudentIds.size > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#7A2828]/10 text-[#7A2828] border border-[#7A2828]/20">
+                    {selectedStudentIds.size} Selected
+                  </span>
+                )}
               </div>
 
               {/* Search filter */}
@@ -570,11 +635,59 @@ export default function StudentsPage() {
               </div>
             </div>
 
-            {/* Table (Address column removed) */}
+            {/* Selection Quick Action Bar (when students are selected) */}
+            {selectedStudentIds.size > 0 && (
+              <div className="bg-amber-50/80 border-b border-amber-200 px-4 py-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 flex-wrap text-slate-700">
+                  <span className="font-semibold text-[#7A2828]">
+                    {selectedStudentIds.size} of {filteredStudents.length} student(s) selected
+                  </span>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectAll(true)}
+                    className="text-blue-700 hover:text-blue-900 font-semibold cursor-pointer underline decoration-dotted"
+                  >
+                    Select All Visible ({filteredStudents.length})
+                  </button>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBatchPrint}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white bg-[#7A2828] hover:bg-[#601F1F] rounded-lg shadow-2xs transition cursor-pointer self-end sm:self-auto"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Print Selected IDs ({selectedStudentIds.size})</span>
+                </button>
+              </div>
+            )}
+
+            {/* Table */}
             <div className="overflow-x-auto max-h-[calc(100vh-21rem)] min-h-[380px] overflow-y-auto rounded-md border border-gray-200">
               <table className="w-full text-left text-sm text-slate-700 border-separate border-spacing-0">
                 <thead className="sticky top-0 z-10 shadow-xs border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   <tr>
+                    <th className="w-12 px-3 py-3 bg-gray-50 border-b border-slate-200 text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          filteredStudents.length > 0 &&
+                          filteredStudents.every((s) => selectedStudentIds.has(s.library_id))
+                        }
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="rounded border-slate-300 text-[#7A2828] focus:ring-[#7A2828] cursor-pointer h-4 w-4"
+                        title="Select / Deselect all visible students"
+                      />
+                    </th>
                     <th className="px-4 py-3 bg-gray-50 border-b border-slate-200">Library ID</th>
                     <th className="px-4 py-3 bg-gray-50 border-b border-slate-200">Full Name</th>
                     <th className="px-4 py-3 bg-gray-50 border-b border-slate-200">Grade / Section</th>
@@ -584,90 +697,115 @@ export default function StudentsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {isLoadingList ? (
                     <tr>
-                      <td colSpan={4} className="px-5 py-8 text-center text-slate-400">
+                      <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
                         <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-slate-400" />
                         <span>Loading student records...</span>
                       </td>
                     </tr>
                   ) : filteredStudents.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-5 py-8 text-center text-slate-400">
+                      <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
                         {searchQuery ? "No students match your search." : "No students registered yet."}
                       </td>
                     </tr>
                   ) : (
-                    filteredStudents.map((s) => (
-                      <tr key={s.library_id} className="hover:bg-slate-50 transition">
-                        <td className="px-4 py-3.5 whitespace-nowrap">
-                          <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-200">
-                            {s.library_id}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 font-medium text-slate-900">
-                          <div className="flex items-center gap-2.5">
-                            <div className="relative w-8 h-8 rounded-full overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
-                              {s.photo_url ? (
-                                /* eslint-disable-next-line @next/next/no-img-element */
-                                <img
-                                  src={s.photo_url}
-                                  alt={s.full_name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span className="text-[11px] font-bold text-slate-500">
-                                  {s.full_name.charAt(0).toUpperCase()}
-                                </span>
-                              )}
+                    filteredStudents.map((s) => {
+                      const isSelected = selectedStudentIds.has(s.library_id);
+                      return (
+                        <tr
+                          key={s.library_id}
+                          onClick={() => handleToggleSelect(s.library_id)}
+                          className={`transition cursor-pointer ${
+                            isSelected
+                              ? "bg-amber-50/70 hover:bg-amber-100/70 border-l-4 border-l-[#7A2828]"
+                              : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <td
+                            className="w-12 px-3 py-3.5 text-center"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelect(s.library_id)}
+                              className="rounded border-slate-300 text-[#7A2828] focus:ring-[#7A2828] cursor-pointer h-4 w-4"
+                            />
+                          </td>
+                          <td className="px-4 py-3.5 whitespace-nowrap">
+                            <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-200">
+                              {s.library_id}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 font-medium text-slate-900">
+                            <div className="flex items-center gap-2.5">
+                              <div className="relative w-8 h-8 rounded-full overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                                {s.photo_url ? (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img
+                                    src={s.photo_url}
+                                    alt={s.full_name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <span className="text-[11px] font-bold text-slate-500">
+                                    {s.full_name.charAt(0).toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="truncate">{s.full_name}</span>
                             </div>
-                            <span className="truncate">{s.full_name}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap">
-                          {s.grade_level}
-                        </td>
-                        <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {/* Print ID Button */}
-                            <button
-                              type="button"
-                              onClick={() => handlePrintSingle(s)}
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2.5 py-1 rounded-md transition shadow-2xs cursor-pointer"
-                              title={`Print ID card for ${s.full_name}`}
-                            >
-                              <Printer className="h-3.5 w-3.5 text-blue-600" />
-                              <span className="hidden sm:inline">Print ID</span>
-                            </button>
+                          </td>
+                          <td className="px-4 py-3.5 text-slate-600 text-xs whitespace-nowrap">
+                            {s.grade_level}
+                          </td>
+                          <td
+                            className="px-4 py-3.5 text-right whitespace-nowrap"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* Print ID Button */}
+                              <button
+                                type="button"
+                                onClick={() => handlePrintSingle(s)}
+                                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-2.5 py-1 rounded-md transition shadow-2xs cursor-pointer"
+                                title={`Print ID card for ${s.full_name}`}
+                              >
+                                <Printer className="h-3.5 w-3.5 text-blue-600" />
+                                <span className="hidden sm:inline">Print ID</span>
+                              </button>
 
-                            {/* Edit Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEdit(s)}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-md transition shadow-2xs cursor-pointer"
-                              title={`Edit ${s.full_name}`}
-                            >
-                              <Pencil className="h-3.5 w-3.5 text-blue-600" />
-                              <span className="hidden md:inline">Edit</span>
-                            </button>
+                              {/* Edit Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(s)}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded-md transition shadow-2xs cursor-pointer"
+                                title={`Edit ${s.full_name}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5 text-blue-600" />
+                                <span className="hidden md:inline">Edit</span>
+                              </button>
 
-                            {/* Delete Button */}
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStudent(s)}
-                              disabled={deletingId === s.library_id}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-md transition shadow-2xs disabled:opacity-50 cursor-pointer"
-                              title={`Delete ${s.full_name}`}
-                            >
-                              {deletingId === s.library_id ? (
-                                <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-600" />
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-                              )}
-                              <span className="hidden md:inline">Delete</span>
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                              {/* Delete Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteStudent(s)}
+                                disabled={deletingId === s.library_id}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-1 rounded-md transition shadow-2xs disabled:opacity-50 cursor-pointer"
+                                title={`Delete ${s.full_name}`}
+                              >
+                                {deletingId === s.library_id ? (
+                                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-600" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                                )}
+                                <span className="hidden md:inline">Delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -859,7 +997,12 @@ export default function StudentsPage() {
         {printingStudent ? (
           <StudentIdCard student={printingStudent} />
         ) : (
-          students.map((student) => (
+          (
+            studentsToPrint ||
+            (selectedStudentIds.size > 0
+              ? students.filter((s) => selectedStudentIds.has(s.library_id))
+              : students)
+          ).map((student) => (
             <StudentIdCard key={student.library_id} student={student} />
           ))
         )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import ExcelJS from "exceljs";
@@ -21,6 +21,8 @@ import {
   X,
   Inbox,
   FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   searchInventory,
@@ -47,6 +49,8 @@ interface BatchPrintItem {
   isbn: string;
 }
 
+const PAGE_SIZE = 36;
+
 export default function InventoryPage() {
   // Search & Filter State
   const [query, setQuery] = useState("");
@@ -55,6 +59,13 @@ export default function InventoryPage() {
   const [books, setBooks] = useState<InventoryBook[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Pagination State & Editor Ref
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [totalBooksCount, setTotalBooksCount] = useState<number>(0);
+  const [hasLoadedInitial, setHasLoadedInitial] = useState<boolean>(false);
+  const editorSectionRef = useRef<HTMLDivElement>(null);
 
   // Selected Book State
   const [selectedBook, setSelectedBook] = useState<InventoryBook | null>(null);
@@ -90,27 +101,27 @@ export default function InventoryPage() {
   // CSV Export State
   const [isExporting, setIsExporting] = useState(false);
 
-  // Perform search with optional category filter
+  // Perform search with optional category filter and pagination
   const handleSearch = useCallback(
-    async (searchQuery: string, categoryFilter: string = selectedCategory) => {
+    async (
+      searchQuery: string,
+      categoryFilter: string = selectedCategory,
+      pageToLoad: number = 1
+    ) => {
       const cleanQuery = searchQuery.trim();
       const cleanCategory = categoryFilter.trim();
-
-      // If BOTH the search query and the category filter are empty strings (""),
-      // do not trigger the database fetch. Instead, set the results array to empty [].
-      if (!cleanQuery && !cleanCategory) {
-        setBooks([]);
-        setSelectedBook(null);
-        setIsSearching(false);
-        setSearchError(null);
-        return;
-      }
 
       setIsSearching(true);
       setSearchError(null);
 
-      const result = await searchInventory(cleanQuery, cleanCategory);
+      const result = await searchInventory(
+        cleanQuery,
+        cleanCategory,
+        pageToLoad,
+        PAGE_SIZE
+      );
       setIsSearching(false);
+      setHasLoadedInitial(true);
 
       if (!result.success) {
         setSearchError(result.error || "Failed to search inventory.");
@@ -118,31 +129,51 @@ export default function InventoryPage() {
       }
 
       setBooks(result.books);
+      setCurrentPage(result.page || pageToLoad);
+      setTotalPages(result.totalPages || 1);
+      setTotalBooksCount(result.totalCount ?? result.books.length);
 
       // If current selected book exists in refreshed results, keep it updated
       if (selectedBook) {
-        const refreshed = result.books.find((b) => b.isbn === selectedBook.isbn);
+        const refreshed = result.books.find(
+          (b) => b.isbn === selectedBook.isbn
+        );
         if (refreshed) {
           setSelectedBook(refreshed);
           setCopies(refreshed.Physical_Books);
-        } else {
-          setSelectedBook(null);
         }
       }
     },
     [selectedCategory, selectedBook]
   );
 
-  // Initial load: fetch unique categories only (do NOT auto-fetch all books)
+  // Initial load: fetch unique categories AND Page 1 of all books
   useEffect(() => {
     async function init() {
-      const cats = await getUniqueCategories();
+      setIsSearching(true);
+      const [cats, initialResult] = await Promise.all([
+        getUniqueCategories(),
+        searchInventory("", "", 1, PAGE_SIZE),
+      ]);
       setCategories(cats);
+      setIsSearching(false);
+      setHasLoadedInitial(true);
+
+      if (initialResult.success) {
+        setBooks(initialResult.books);
+        setCurrentPage(initialResult.page || 1);
+        setTotalPages(initialResult.totalPages || 1);
+        setTotalBooksCount(
+          initialResult.totalCount ?? initialResult.books.length
+        );
+      } else if (initialResult.error) {
+        setSearchError(initialResult.error);
+      }
     }
     init();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When a book is selected, populate form fields
+  // When a book is selected, populate form fields and smooth scroll to editor
   const handleSelectBook = (book: InventoryBook) => {
     setSelectedBook(book);
     setTitle(book.title || "");
@@ -154,19 +185,33 @@ export default function InventoryPage() {
     setCopies([...(book.Physical_Books || [])]);
     setMetaMessage(null);
     setCopyFeedback(null);
+
+    setTimeout(() => {
+      editorSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
   };
 
   // Submit search form
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    handleSearch(query, selectedCategory);
+    handleSearch(query, selectedCategory, 1);
   };
 
   // Category filter changed
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newCategory = e.target.value;
     setSelectedCategory(newCategory);
-    handleSearch(query, newCategory);
+    handleSearch(query, newCategory, 1);
+  };
+
+  // Page change handler
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages && newPage !== currentPage) {
+      handleSearch(query, selectedCategory, newPage);
+    }
   };
 
   // Total physical copies in currently filtered list
@@ -176,9 +221,29 @@ export default function InventoryPage() {
   );
 
   // Trigger Batch Print Barcodes
-  const handleBatchPrint = () => {
+  const handleBatchPrint = async () => {
+    let sourceBooks = books;
+
+    // If a filter is active and results span across multiple pages, fetch all matching copies
+    if (
+      (query.trim() || selectedCategory.trim()) &&
+      totalBooksCount > books.length
+    ) {
+      setIsSearching(true);
+      const allMatching = await searchInventory(
+        query.trim(),
+        selectedCategory.trim(),
+        1,
+        1000
+      );
+      setIsSearching(false);
+      if (allMatching.success && allMatching.books.length > 0) {
+        sourceBooks = allMatching.books;
+      }
+    }
+
     const items: BatchPrintItem[] = [];
-    books.forEach((book) => {
+    sourceBooks.forEach((book) => {
       (book.Physical_Books || []).forEach((copy) => {
         items.push({
           accessionNumber: copy.accession_number,
@@ -191,7 +256,7 @@ export default function InventoryPage() {
     });
 
     if (items.length === 0) {
-      alert("No physical copies found in the current filter to print.");
+      alert("No physical copies found in the current selection to print.");
       return;
     }
 
@@ -633,9 +698,8 @@ export default function InventoryPage() {
               onChange={(e) => {
                 const val = e.target.value;
                 setQuery(val);
-                if (!val.trim() && !selectedCategory) {
-                  setBooks([]);
-                  setSelectedBook(null);
+                if (!val.trim()) {
+                  handleSearch("", selectedCategory, 1);
                 }
               }}
               placeholder="Search by title, author, category, or ISBN..."
@@ -653,7 +717,7 @@ export default function InventoryPage() {
               onChange={handleCategoryChange}
               className="w-full pl-10 pr-8 py-2.5 text-sm border border-slate-300 rounded-xl bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Select a Category...</option>
+              <option value="">All Categories</option>
               {categories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
@@ -695,25 +759,44 @@ export default function InventoryPage() {
         /* Empty State */
         <div className="no-print bg-white border border-slate-200 rounded-2xl p-12 sm:p-16 text-center space-y-4 shadow-sm">
           <div className="p-4 bg-slate-100 rounded-full w-16 h-16 mx-auto flex items-center justify-center text-slate-400">
-            <Inbox className="h-8 w-8 text-slate-400" />
+            {!hasLoadedInitial || isSearching ? (
+              <RefreshCw className="h-8 w-8 text-blue-500 animate-spin" />
+            ) : (
+              <Inbox className="h-8 w-8 text-slate-400" />
+            )}
           </div>
           <div className="space-y-1.5 max-w-md mx-auto">
             <h3 className="text-base sm:text-lg font-bold text-slate-800">
-              Inventory Ready
+              {!hasLoadedInitial || isSearching ? "Loading Library Inventory..." : "No Matching Books Found"}
             </h3>
             <p className="text-sm text-slate-500">
-              Search for a book or select a category to begin managing inventory.
+              {!hasLoadedInitial || isSearching
+                ? "Fetching books from the catalog..."
+                : "No books match your current search query or category filter."}
             </p>
+            {!isSearching && (query || selectedCategory) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setSelectedCategory("");
+                  handleSearch("", "", 1);
+                }}
+                className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition cursor-pointer"
+              >
+                Reset Filters (Show All Books)
+              </button>
+            )}
           </div>
         </div>
       ) : (
         /* When books.length > 0 */
         <div className="no-print space-y-8">
           {/* Results Grid Card */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Matching Titles ({books.length})
+                Showing {books.length} of {totalBooksCount} Titles (Sorted A–Z)
                 {selectedCategory && (
                   <span className="text-blue-600 ml-1.5 font-semibold">
                     in &quot;{selectedCategory}&quot;
@@ -721,13 +804,30 @@ export default function InventoryPage() {
                 )}
               </span>
               {selectedBook && (
-                <span className="text-xs text-blue-600 font-medium truncate max-w-xs">
-                  Active: <strong>{selectedBook.title}</strong>
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-blue-600 font-medium truncate max-w-xs">
+                    Active: <strong>{selectedBook.title}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBook(null)}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md transition cursor-pointer"
+                    title="Close editor and browse full catalog"
+                  >
+                    <X className="h-3 w-3" />
+                    <span>Close</span>
+                  </button>
+                </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-64 overflow-y-auto pr-1">
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto pr-1 transition-all ${
+                selectedBook
+                  ? "max-h-64"
+                  : "max-h-[calc(100vh-20rem)] min-h-[320px]"
+              }`}
+            >
               {books.map((book) => {
                 const isSelected = selectedBook?.isbn === book.isbn;
                 const copyCount = book.Physical_Books?.length || 0;
@@ -737,7 +837,7 @@ export default function InventoryPage() {
                     key={book.isbn}
                     type="button"
                     onClick={() => handleSelectBook(book)}
-                    className={`flex items-start gap-3 p-3 rounded-xl text-left border transition ${
+                    className={`flex items-start gap-3 p-3 rounded-xl text-left border transition cursor-pointer ${
                       isSelected
                         ? "bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20 shadow-sm"
                         : "bg-slate-50/70 hover:bg-slate-100 border-slate-200"
@@ -781,19 +881,52 @@ export default function InventoryPage() {
                 );
               })}
             </div>
+
+            {/* Pagination & Hint Footer */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
+              <div className="text-xs text-slate-500 flex items-center gap-1.5">
+                {!selectedBook ? (
+                  <span className="inline-flex items-center gap-1.5 text-blue-700 bg-blue-50/80 border border-blue-200/60 px-2.5 py-1 rounded-lg">
+                    <BookMarked className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                    <span>Click any book card above to edit metadata or manage physical copies.</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-400">
+                    Viewing page {currentPage} of {totalPages}
+                  </span>
+                )}
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1 || isSearching}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs cursor-pointer"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <span>Prev</span>
+                </button>
+                <span className="text-xs font-semibold text-slate-700 px-2">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage >= totalPages || isSearching}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs cursor-pointer"
+                >
+                  <span>Next</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* If no book is selected yet, prompt to pick one */}
-          {!selectedBook ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center space-y-3 shadow-sm">
-              <BookMarked className="h-9 w-9 mx-auto text-slate-300" />
-              <h2 className="text-sm font-bold text-slate-700">No Book Selected</h2>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Choose a title from the matching results above to inspect and edit its bibliographic metadata and physical holdings.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-8">
+          {/* When a book is selected, show the Editor (with smooth-scroll ref) */}
+          {selectedBook && (
+            <div ref={editorSectionRef} className="space-y-8 scroll-mt-6">
           {/* SECTION 2: Metadata Edit Form */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-4">
@@ -806,9 +939,20 @@ export default function InventoryPage() {
                   Modifying this metadata updates the universal concept of this book title across all library records.
                 </p>
               </div>
-              <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 self-start sm:self-auto">
-                ISBN: {selectedBook.isbn}
-              </span>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                  ISBN: {selectedBook.isbn}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBook(null)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded-lg transition cursor-pointer"
+                  title="Close editor and return to full catalog browse"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span>Close Editor</span>
+                </button>
+              </div>
             </div>
 
             {metaMessage && (

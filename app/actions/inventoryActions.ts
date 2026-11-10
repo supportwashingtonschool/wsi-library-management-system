@@ -28,6 +28,10 @@ export interface InventoryBook {
 export interface InventorySearchResult {
   success: boolean;
   books: InventoryBook[];
+  totalCount?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
   error?: string;
 }
 
@@ -74,43 +78,51 @@ export async function getUniqueCategories(): Promise<string[]> {
 /**
  * Searches Book_Metadata by title, author, or ISBN.
  * If categoryFilter is provided (and not 'All'), filters by category.
+ * Orders results alphabetically by title (A-Z) and supports server-side pagination.
  * Joins related Physical_Books array for each result.
  */
 export async function searchInventory(
   query: string = "",
-  categoryFilter?: string
+  categoryFilter?: string,
+  page: number = 1,
+  pageSize: number = 36
 ): Promise<InventorySearchResult> {
   try {
     const trimmed = query.trim();
     const sanitized = trimmed.replace(/[%_,]/g, " ").trim();
     const cleanCategory = categoryFilter?.trim();
 
+    const safePage = Math.max(1, Math.floor(page));
+    const safePageSize = Math.max(1, Math.min(1000, Math.floor(pageSize)));
+    const from = (safePage - 1) * safePageSize;
+    const to = from + safePageSize - 1;
+
     let req = supabase
       .from("Book_Metadata")
-      .select("*, Physical_Books(*)");
+      .select("*, Physical_Books(*)", { count: "exact" });
 
     if (cleanCategory && cleanCategory.toLowerCase() !== "all") {
       req = req.ilike("category", `%${cleanCategory}%`);
     }
 
     if (sanitized) {
-      req = req
-        .or(
-          `title.ilike.%${sanitized}%,author.ilike.%${sanitized}%,isbn.ilike.%${sanitized}%,category.ilike.%${sanitized}%`
-        )
-        .order("created_at", { ascending: false })
-        .limit(50);
-    } else {
-      req = req
-        .order("created_at", { ascending: false })
-        .limit(50);
+      req = req.or(
+        `title.ilike.%${sanitized}%,author.ilike.%${sanitized}%,isbn.ilike.%${sanitized}%,category.ilike.%${sanitized}%`
+      );
     }
 
-    const { data, error } = await req;
+    req = req
+      .order("title", { ascending: true })
+      .range(from, to);
+
+    const { data, error, count } = await req;
 
     if (error) {
       return { success: false, books: [], error: error.message };
     }
+
+    const totalCount = count ?? (data ? data.length : 0);
+    const totalPages = Math.max(1, Math.ceil(totalCount / safePageSize));
 
     // Normalize published_year / publication_year
     const normalized: InventoryBook[] = (data || []).map((b) => ({
@@ -122,6 +134,10 @@ export async function searchInventory(
     return {
       success: true,
       books: normalized,
+      totalCount,
+      page: safePage,
+      pageSize: safePageSize,
+      totalPages,
     };
   } catch (err: unknown) {
     const msg =
