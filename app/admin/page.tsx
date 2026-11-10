@@ -8,9 +8,12 @@ import {
   Clock,
   CheckCircle2,
   BookMarked,
+  ScanLine,
 } from "lucide-react";
 import { getDashboardData } from "@/app/actions/dashboardActions";
 import RefreshDashboardButton from "./RefreshDashboardButton";
+import AttendanceScannerDesk from "./AttendanceScannerDesk";
+import DashboardAnalyticsClient from "./DashboardAnalyticsClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,6 +29,8 @@ export default async function AdminDashboardPage() {
     overdueItems,
     recentLoans,
     auditTimestamp,
+    todayVisitsCount,
+    currentlyInsideCount,
   } = result.data;
 
   const formatDate = (dateStr?: string | null): string => {
@@ -57,7 +62,7 @@ export default async function AdminDashboardPage() {
             Admin Dashboard
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Real-time library statistics, inventory health, and recent circulation activity.
+            Real-time library statistics, student attendance log, and circulation reports.
           </p>
         </div>
 
@@ -89,9 +94,9 @@ export default async function AdminDashboardPage() {
         </div>
       )}
 
-      {/* 4 Metric Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Total Cataloged */}
+      {/* 5 Headline Metric Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {/* 1. Total Cataloged */}
         <Link
           href="/admin/inventory"
           className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-blue-200 transition group flex items-center justify-between"
@@ -121,7 +126,7 @@ export default async function AdminDashboardPage() {
           <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-1 transition" />
         </Link>
 
-        {/* Active Loans */}
+        {/* 2. Active Loans */}
         <Link
           href="/admin/circulation"
           className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-emerald-200 transition group flex items-center justify-between"
@@ -145,7 +150,7 @@ export default async function AdminDashboardPage() {
           <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-1 transition" />
         </Link>
 
-        {/* Students Enrolled */}
+        {/* 3. Students Enrolled */}
         <Link
           href="/admin/students"
           className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-purple-200 transition group flex items-center justify-between"
@@ -169,7 +174,7 @@ export default async function AdminDashboardPage() {
           <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-purple-600 group-hover:translate-x-1 transition" />
         </Link>
 
-        {/* Overdue Items */}
+        {/* 4. Overdue Items */}
         <Link
           href="/admin/circulation"
           className={`p-5 bg-white border rounded-xl shadow-sm hover:shadow-md transition group flex items-center justify-between ${
@@ -200,13 +205,48 @@ export default async function AdminDashboardPage() {
                 {overdueItems}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                {overdueItems > 0 ? "Requires librarian follow-up" : "All loans on schedule"}
+                {overdueItems > 0 ? "Requires librarian notice" : "All loans on schedule"}
               </p>
             </div>
           </div>
           <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-amber-600 group-hover:translate-x-1 transition" />
         </Link>
+
+        {/* 5. Today's LRC Attendance */}
+        <div className="p-5 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md hover:border-indigo-200 transition flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+              <ScanLine className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Today&apos;s Attendance
+              </p>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl sm:text-3xl font-extrabold text-slate-900">
+                  {todayVisitsCount || 0}
+                </span>
+                <span className="text-xs font-medium text-slate-500">
+                  Visits
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+                {currentlyInsideCount || 0} currently inside
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Live WSI LRC Attendance & Reading Log Scanner Desk */}
+      <AttendanceScannerDesk
+        initialLogs={result.data.attendanceLogs}
+        currentlyInsideCount={currentlyInsideCount}
+        todayVisitsCount={todayVisitsCount}
+      />
+
+      {/* Interactive Library Statistics & PDF Export Client */}
+      <DashboardAnalyticsClient data={result.data} />
 
       {/* Recent Library Activity Table Section */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">

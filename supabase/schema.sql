@@ -103,3 +103,29 @@ CREATE POLICY "Allow public insert on student-photos"
     ON storage.objects FOR INSERT
     WITH CHECK (bucket_id = 'student-photos');
 
+-- ==============================================================================
+-- 6. Attendance_Logs
+-- Tracks student library visits (Time In, Time Out, Book Read, Remarks)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS "Attendance_Logs" (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id VARCHAR(50) NOT NULL REFERENCES "Students"(library_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    time_in TIMESTAMPTZ NOT NULL DEFAULT TIMEZONE('utc', NOW()),
+    time_out TIMESTAMPTZ,
+    book_accession VARCHAR(50),
+    book_title TEXT,
+    remarks TEXT,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
+);
+
+-- Indexes for attendance lookups
+CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON "Attendance_Logs"(student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_time_in ON "Attendance_Logs"(time_in);
+CREATE INDEX IF NOT EXISTS idx_attendance_time_out ON "Attendance_Logs"(time_out);
+
+-- Enable RLS for Attendance_Logs
+ALTER TABLE "Attendance_Logs" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public all access on Attendance_Logs"
+    ON "Attendance_Logs" FOR ALL USING (true) WITH CHECK (true);
+
