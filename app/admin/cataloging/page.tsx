@@ -28,6 +28,7 @@ import {
   confirmBulkImport,
   type ParsedBookRow,
   type ConfirmImportResult,
+  type DetectedSheetMeta,
 } from "@/app/actions/importActions";
 
 // Dynamically import react-barcode to avoid SSR canvas/window mismatches
@@ -72,6 +73,7 @@ export default function CatalogingPage() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirmSuccess, setConfirmSuccess] = useState<ConfirmImportResult | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string>("");
+  const [detectedMeta, setDetectedMeta] = useState<DetectedSheetMeta | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Handle parsing the uploaded Excel file (previews data before DB insert)
@@ -85,6 +87,7 @@ export default function CatalogingPage() {
     setConfirmError(null);
     setConfirmSuccess(null);
     setParsedBooks(null);
+    setDetectedMeta(null);
 
     try {
       const formData = new FormData();
@@ -97,6 +100,7 @@ export default function CatalogingPage() {
         setParseError(result.error || "Failed to parse the Excel file.");
       } else {
         setParsedBooks(result.books);
+        setDetectedMeta(result.detectedMeta || null);
         // Default checkboxes: checked if NOT a duplicate
         const initialSelected = new Set<string>();
         result.books.forEach((b) => {
@@ -141,7 +145,7 @@ export default function CatalogingPage() {
     setSelectedRowIds(new Set(parsedBooks.filter((b) => !b.isDuplicate).map((b) => b.id)));
   };
 
-  // Confirm & Import Selected Books into Database
+  // Confirm & Import Selected Books directly into Database
   const handleConfirmImport = async () => {
     if (!parsedBooks) return;
     const selectedBooks = parsedBooks.filter((b) => selectedRowIds.has(b.id));
@@ -176,13 +180,16 @@ export default function CatalogingPage() {
         setParsedBooks(null);
         setSelectedRowIds(new Set());
         setUploadedFileName("");
+        setDetectedMeta(null);
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
       }
     } catch (err: unknown) {
       setIsConfirming(false);
-      setConfirmError(err instanceof Error ? err.message : "An unexpected error occurred during import.");
+      setConfirmError(
+        err instanceof Error ? err.message : "An unexpected error occurred during import."
+      );
     }
   };
 
@@ -192,7 +199,9 @@ export default function CatalogingPage() {
     setSelectedRowIds(new Set());
     setParseError(null);
     setConfirmError(null);
+    setConfirmSuccess(null);
     setUploadedFileName("");
+    setDetectedMeta(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -814,26 +823,32 @@ export default function CatalogingPage() {
               <div className="space-y-4">
                 {/* Column Guide & Formatting Tips */}
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-600 space-y-2">
-                  <p className="font-semibold text-slate-700">Supported Excel Columns (Row 1 headers of Sheet 1):</p>
+                  <p className="font-semibold text-slate-700">Supported Columns (Auto-scans rows 1–20 across all sheets):</p>
                   <div className="flex flex-wrap gap-1.5">
                     <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] font-bold text-slate-900 shadow-2xs">
                       Title <span className="text-rose-500">*</span>
                     </span>
                     <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                      Author
+                      Author / Writer
                     </span>
                     <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                      Publisher
+                      Publisher / Press
                     </span>
                     <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                      Category
+                      Category / Genre
                     </span>
                     <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
-                      ISBN
+                      ISBN / Barcode
+                    </span>
+                    <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                      Call Number / Dewey
+                    </span>
+                    <span className="font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-[11px] text-slate-700 shadow-2xs">
+                      Year / Copyright
                     </span>
                   </div>
                   <ul className="text-[11px] text-slate-500 list-disc list-inside space-y-0.5 pt-0.5">
-                    <li>Missing titles will be skipped automatically.</li>
+                    <li>Multi-row banners, cover sheets, and merged section divider rows are automatically skipped.</li>
                     <li>Items without an ISBN will be assigned an automated pseudo-ISBN (<code className="font-mono text-slate-700">WSI-CUSTOM-...</code>).</li>
                     <li>Titles and ISBNs matching existing library records will be flagged as duplicates.</li>
                   </ul>
@@ -841,13 +856,13 @@ export default function CatalogingPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    Select Excel File (.xlsx) to Preview
+                    Select Excel / CSV File (.xlsx, .csv) to Preview
                   </label>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv"
                       onChange={handleFileChange}
                       disabled={isParsing}
                       className="flex-1 text-xs text-slate-600 file:mr-3 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer border border-slate-300 rounded-lg p-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
@@ -861,7 +876,7 @@ export default function CatalogingPage() {
                     <RefreshCw className="h-5 w-5 animate-spin text-blue-600 shrink-0" />
                     <div>
                       <p className="text-xs font-semibold">
-                        Parsing Excel sheet and checking library catalog for duplicates...
+                        Scanning worksheets, mapping messy headers, and checking library catalog for duplicates...
                       </p>
                       <p className="text-[11px] text-blue-700 mt-0.5">
                         Please wait a moment while we scan your records.
@@ -908,6 +923,42 @@ export default function CatalogingPage() {
             {/* Step 2: Interactive Preview Table (when books have been parsed) */}
             {parsedBooks && (
               <div className="space-y-4">
+                {/* Detected Header Mapping Banner */}
+                {detectedMeta && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                          <span>Detected Header Mapping</span>
+                        </span>
+                        <span className="text-[11px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700">
+                          Sheet: <strong className="text-slate-900">{detectedMeta.sheetName}</strong>
+                        </span>
+                        <span className="text-[11px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-700">
+                          Header Row: <strong className="text-slate-900">Row {detectedMeta.headerRowNumber}</strong>
+                        </span>
+                      </div>
+                      {detectedMeta.skippedBannerRows > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                          <AlertTriangle className="h-3 w-3 text-amber-600" />
+                          Skipped {detectedMeta.skippedBannerRows} banner/divider row(s)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {Object.entries(detectedMeta.mappedColumns).map(([canon, raw]) => (
+                        <span
+                          key={canon}
+                          className="font-mono text-[11px] bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600 shadow-2xs"
+                        >
+                          <strong className="text-slate-900">{canon}</strong> &larr; &quot;{raw}&quot;
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Stats & Batch Controls Bar */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
                   <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1085,7 +1136,7 @@ export default function CatalogingPage() {
                 )}
 
                 {/* Bottom Action Footer */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
                   <div className="text-xs text-slate-600">
                     <strong>{selectedRowIds.size}</strong> of {parsedBooks.length} book(s) selected for import.
                     {selectedRowIds.size > 0 && (
@@ -1119,7 +1170,7 @@ export default function CatalogingPage() {
                       ) : (
                         <>
                           <ShieldCheck className="h-4 w-4" />
-                          <span>Confirm &amp; Import Selected ({selectedRowIds.size})</span>
+                          <span>Confirm &amp; Save to Database ({selectedRowIds.size})</span>
                         </>
                       )}
                     </button>
